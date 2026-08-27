@@ -4667,8 +4667,15 @@ function renderCxCAging(){
   _agingData.cxc = buckets;
   renderAgingWidget('cxc-aging', buckets, 'cxc');
 }
+// Los préstamos guardan su propio saldo y calendario de cuotas en la pestaña Préstamos — no le
+// aportan nada útil a "Antigüedad de Saldos" (esa vista es para facturas de proveedores con
+// fecha de vencimiento puntual; un préstamo activo siempre mostraría su saldo completo ahí para
+// siempre, sin importar si estás al día o no — puro ruido, no antigüedad real).
+function cxpItemsParaAging(){
+  return ['proveedores','serviciosFijos','otros'].flatMap(k=>S.cuentasPagar[k]);
+}
 function renderCxPAging(){
-  const pendientes = allCXPItems().filter(x=>x.estado!=='pagada');
+  const pendientes = cxpItemsParaAging().filter(x=>x.estado!=='pagada');
   const buckets = bucketAntiguedad(pendientes, 'vence', cxpPending);
   _agingData.cxp = buckets;
   renderAgingWidget('cxp-aging', buckets, 'cxp');
