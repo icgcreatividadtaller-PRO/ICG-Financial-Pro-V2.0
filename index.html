@@ -157,7 +157,7 @@ button:not(.del-btn):not(.modal-close):not(.notif-close):not(.rename-btn):not(.c
   color:var(--indigo2);
   box-shadow:0 4px 20px rgba(79,70,229,.15);
 }
-.acct-rename{background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:1px 4px;opacity:0;transition:opacity .2s;}
+.acct-rename{background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:1px 4px;opacity:.55;transition:opacity .2s;}
 .acct-tab:hover .acct-rename{opacity:1;}
 
 /* ── STAT CARDS ── */
@@ -2624,7 +2624,7 @@ function defaultState() {
       {id:1,estado:'pendiente',paidDate:null,payMethod:null,payAccountIdx:null,payRef:null,
        nombre:'BHD',concepto:'PILY',monto:14534.10,saldo:348402.68,fecha:today(),vence:'2026-09-21',metodo:'débito_automático',tasa:23.70},
       {id:2,estado:'pendiente',paidDate:null,payMethod:null,payAccountIdx:null,payRef:null,
-       nombre:'BHD',concepto:'TINTIN',monto:11024.45,saldo:362533.15,fecha:today(),vence:'2026-09-29',metodo:'débito_automático',tasa:21.35}
+       nombre:'BHD',concepto:'TINTIN',monto:11024.45,saldo:362533.15,fecha:today(),vence:'2026-08-29',metodo:'débito_automático',tasa:21.35}
     ], otros:[] },
     clientes:   [],
     suplidores: [],
@@ -2901,7 +2901,12 @@ function switchBlock(key){
 
 function renderAccountSubNav(){
   const nav=document.getElementById('acct-subnav'); if(!nav)return;
-  nav.innerHTML=S.accounts.map((acc,i)=>`<button class="acct-tab ${i===_activeAccount?'active':''}" onclick="switchAccount(${i})">${esc(acc.name)}<button class="acct-rename" onclick="event.stopPropagation();openRename(${i})">✎</button></button>`).join('');
+  // OJO: antes esto era un <button> anidado dentro de otro <button> — HTML inválido que los
+  // navegadores "corrigen" solos de forma impredecible (cerrando el botón exterior antes de
+  // tiempo), y por eso el lápiz de renombrar podía no aparecer nunca. El contenedor pasa a ser
+  // un <div> (el CSS .acct-tab funciona igual), y el botón real de renombrar queda como
+  // hermano suyo, nunca anidado dentro de otro botón.
+  nav.innerHTML=S.accounts.map((acc,i)=>`<div class="acct-tab ${i===_activeAccount?'active':''}" style="cursor:pointer;" onclick="switchAccount(${i})">${esc(acc.name)}<button type="button" class="acct-rename" onclick="event.stopPropagation();openRename(${i})">✎</button></div>`).join('');
 }
 
 function switchAccount(i){
