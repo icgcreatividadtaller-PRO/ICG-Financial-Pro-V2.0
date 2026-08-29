@@ -5123,7 +5123,12 @@ function renderBalanceGeneral(){
     const c=(p.concepto||'').trim().toUpperCase();
     return (c.includes('TINTIN')||c.includes('PILY'))&&p.estado!=='pagada';
   }).reduce((s,p)=>s+(parseFloat(p.saldo)||0),0);
-  const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte, menos deuda que ya existía en ese momento
+  // Mismo problema que resolvimos con los préstamos: si le pones a la Tarjeta el "monto
+  // adeudado a la fecha" como punto de partida (en vez de construirlo desde cero con Cargos y
+  // Pagos), esa deuda de apertura sube el Pasivo pero nada en el Capital la compensaba — se
+  // trata igual que la deuda de apertura de los préstamos.
+  const tarjetaAperturaAdeudo = Math.max(0, limitRD - (S.creditCard.initAvailRD ?? S.creditCard.availableRD ?? 0));
+  const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD - tarjetaAperturaAdeudo; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte, menos deuda (préstamos y tarjeta) que ya existía en ese momento
   const ingresosNetosHistoricos = S.ingresos.reduce((s,x)=>s+x.monto-( x.itbis||0),0);
   const egresosHistoricos = S.egresos.reduce((s,x)=>s+x.monto,0);
   const utilidadesRetenidas = ingresosNetosHistoricos - egresosHistoricos;
@@ -5151,7 +5156,7 @@ function renderBalanceGeneral(){
     <div class="add-form" style="margin-bottom:0;">
       <h3 style="color:#818cf8;">CAPITAL</h3>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3010 Capital del Titular</span><span class="td-mono">${fmt(capitalTitular)}</span></div>
-      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}</div>
+      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}${tarjetaAperturaAdeudo>0?` − Tarjeta de Apertura: ${fmt(tarjetaAperturaAdeudo)}`:''}</div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3020 Utilidades Retenidas</span><span class="td-mono">${fmt(utilidadesRetenidas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3030 Distribuciones (−)</span><span class="td-mono negative">−${fmt(distribucionesHistoricas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#818cf8;"><span>TOTAL CAPITAL</span><span class="td-mono">${fmt(totalCapital)}</span></div>
@@ -5211,6 +5216,7 @@ function renderBalanceGeneral(){
         ${fila('Saldos Iniciales de Cuentas', saldosInicialesCuentas, true)}
         ${fila('Ajustes de Corte de Balance', ajustesDeCorte, true)}
         ${fila('− Préstamos de Apertura (TINTIN+PILY)', -prestamosAperturaBHD, true)}
+        ${fila('− Tarjeta de Apertura', -tarjetaAperturaAdeudo, true)}
         ${fila('Capital del Titular', capitalTitular)}
         ${fila('Ingresos Netos (histórico total, sin ITBIS)', ingresosNetosHistoricos, true)}
         ${fila('− Egresos (histórico total)', -egresosHistoricos, true)}
