@@ -697,6 +697,16 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 </div>
 
 <!-- ══ CAMBIAR CATEGORÍA (factura de CxC ya pagada) — no toca el pago ni el dinero ══ -->
+<!-- ══ NOTIFICACIÓN (reemplaza los avisos flotantes que desaparecían solos) ══ -->
+<div class="modal-overlay" id="notifyModal">
+  <div class="modal notify-box" style="max-width:420px;border-width:2px;text-align:center;">
+    <div class="notify-icon" style="font-size:40px;margin-bottom:12px;">◎</div>
+    <h2 class="notify-title" style="font-size:17px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Aviso</h2>
+    <p class="notify-msg" style="font-size:15px;color:#c0c6d8;margin-bottom:22px;line-height:1.5;"></p>
+    <button class="btn btn-primary" style="width:100%;" onclick="closeNotify()">OK</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="cambiarCatCxCModal">
   <div class="modal" style="max-width:400px;border-color:rgba(129,140,248,.4);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -1081,11 +1091,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     </div>
   </div>
   <div class="transactions-section">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3>Facturas Registradas</h3>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;" onclick="repararITBISFacturas()">🔧 Reparar ITBIS de Facturas Viejas</button>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;margin-left:8px;" onclick="repararFacturasHuerfanas()">🔗 Reparar Facturas Huérfanas</button>
-    </div>
+    <h3>Facturas Registradas</h3>
     <div style="display:flex;gap:6px;margin-bottom:14px;" id="cxc-view-tabs">
       <button class="acct-tab active" id="cxc-vtab-pendientes" onclick="switchCXCView('pendientes')">🔴 Pendientes</button>
       <button class="acct-tab" id="cxc-vtab-pagadas" onclick="switchCXCView('pagadas')">✅ Pagadas</button>
@@ -1363,7 +1369,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3>Historial de Ingresos</h3>
       <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;" onclick="abrirRevisionDuplicados('ingresos')">🔍 Revisar Posibles Duplicados</button>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;margin-left:8px;" onclick="repararITBISIngresosGenerados()">🔧 Reparar ITBIS de Ingresos Ya Generados</button>
     </div>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
@@ -2593,21 +2598,36 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 
 <script>
 // ══════════════════ NOTIFICATION SYSTEM ══════════════════
+// Antes esto era un aviso flotante que desaparecía solo a los 4 segundos — a veces no daba
+// tiempo de leerlo. Ahora es un modal centrado con botón OK que hay que cerrar a mano. Si llegan
+// varios avisos seguidos, se hace fila (uno a la vez, no se pisan entre sí).
+const _notifyQueue = [];
+let _notifyShowing = false;
 function notify(type, title, msg=''){
+  _notifyQueue.push({type,title,msg});
+  if(!_notifyShowing) _processNotifyQueue();
+}
+function _processNotifyQueue(){
+  if(!_notifyQueue.length){ _notifyShowing=false; return; }
+  _notifyShowing = true;
+  const {type,title,msg} = _notifyQueue.shift();
   const icons={success:'◈',error:'⊘',info:'◎',warning:'◬'};
-  const c=document.getElementById('notif-container');
-  const n=document.createElement('div');
-  n.className=`notif ${type}`;
-  n.innerHTML=`
-    <div class="notif-icon">${icons[type]||'◎'}</div>
-    <div class="notif-body">
-      <div class="notif-title">${title}</div>
-      ${msg?`<div class="notif-msg">${msg}</div>`:''}
-    </div>
-    <button class="notif-close" onclick="this.closest('.notif').remove()">×</button>
-    <div class="notif-bar"></div>`;
-  c.appendChild(n);
-  setTimeout(()=>{n.style.animation='notifOut .3s ease forwards';setTimeout(()=>n.remove(),300);},4000);
+  const colors={success:'#4ade80',error:'#ef4444',info:'#818cf8',warning:'#fdc901'};
+  const color = colors[type]||'#818cf8';
+  const modal = document.getElementById('notifyModal');
+  modal.querySelector('.notify-icon').textContent = icons[type]||'◎';
+  modal.querySelector('.notify-icon').style.color = color;
+  modal.querySelector('.notify-box').style.borderColor = color;
+  modal.querySelector('.notify-title').textContent = title;
+  modal.querySelector('.notify-title').style.color = color;
+  const msgEl = modal.querySelector('.notify-msg');
+  msgEl.innerHTML = msg||'';
+  msgEl.style.display = msg ? '' : 'none';
+  modal.classList.add('open');
+}
+function closeNotify(){
+  document.getElementById('notifyModal').classList.remove('open');
+  setTimeout(_processNotifyQueue, 150); // pequeña pausa antes del siguiente, si hay más en fila
 }
 
 // ══════════════════ STATE ══════════════════
@@ -2854,11 +2874,11 @@ const NAV_BLOCKS={
     {id:'tab-cxp',cls:'nav-indigo',label:'CxP',t:'cxp'},
     {id:'tab-cli',cls:'',label:'Clientes',t:'clientes'},
     {id:'tab-sup',cls:'nav-indigo',label:'Suplidores',t:'suplidores'},
-    {id:'tab-cc',cls:'nav-indigo',label:'Tarjeta',t:'cc'},
     {id:'tab-contab',cls:'nav-indigo',label:'Contabilidad',t:'contabilidad'}
   ]},
   finanzas:{label:'🔒 Finanzas',locked:true,default:'cuentas',tabs:[
     {id:'tab-cuentas',cls:'',label:'Cuentas',t:'cuentas'},
+    {id:'tab-cc',cls:'nav-indigo',label:'Tarjeta',t:'cc'},
     {id:'tab-con',cls:'nav-indigo',label:'Consolidado',t:'consolidated'},
     {id:'tab-comp',cls:'',label:'Comparativo',t:'comparativo'},
     {id:'tab-rep',cls:'',label:'Reportes',t:'reportes'},
@@ -2930,7 +2950,7 @@ let _pendingTabTarget = null;
 let _pinGateMode = 'enter'; // 'enter' | 'create' | 'change'
 
 function activateTab(idx){
-  const esProtegida = (typeof idx==='number') || ['cuentas','rentabilidad','consolidated','reportes','flujocaja','balancegeneral','comparativo'].includes(idx);
+  const esProtegida = (typeof idx==='number') || ['cuentas','cc','rentabilidad','consolidated','reportes','flujocaja','balancegeneral','comparativo'].includes(idx);
   if(esProtegida && !_pinUnlockedThisSession){
     _pendingTabTarget = idx;
     openPinGate(S.securityPin ? 'enter' : 'create');
@@ -4741,6 +4761,12 @@ function closeAgingModal(){
 // avisa con un solo mensaje consolidado al abrir el sistema — para no depender de que el usuario
 // entre a revisar cada módulo manualmente.
 function checkVencimientosProximos(){
+  // Antes aparecía en cada carga de la página, sin importar cuántas veces se refrescara en el
+  // mismo día — molesto. Ahora solo se muestra la primera vez que se entra al sistema cada día
+  // calendario (usando localStorage, es solo una preferencia de "ya lo vi hoy", no un dato real).
+  const hoyStr = today();
+  if(localStorage.getItem('vencimientos_ultima_vez') === hoyStr) return;
+
   const hoy = today();
   const limite = new Date(); limite.setDate(limite.getDate()+7);
   const limiteStr = limite.toISOString().slice(0,10);
@@ -4765,6 +4791,8 @@ function checkVencimientosProximos(){
 
   const totalItems = cxcProximas.length + cxpProximas.length;
   if(totalItems===0) return;
+
+  localStorage.setItem('vencimientos_ultima_vez', hoyStr); // ya se avisó hoy, no repetir hasta mañana
 
   const totalVencidasYa = cxcVencidasYa.length + cxpVencidasYa.length;
   const partes = [];
@@ -7927,8 +7955,8 @@ function renderRentabilidad(){
   document.getElementById('rent-table-title').textContent=desde
     ?`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year} · desde ${fmtDate(desde)}`
     :`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year}`;
-  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos</th><th>Utilidad</th><th>Margen %</th><th>vs Ant.</th></tr>`;
-  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{const prev=i>0?data[i-1]:null,vsAnt=prev?p.util-prev.util:null;return`<tr><td style="font-weight:600;">${p.label}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td><td class="td-mono" style="color:${vsAnt===null?'#9ca3af':vsAnt>=0?'#818cf8':'#ef4444'}">${vsAnt===null?'—':(vsAnt>=0?'▲ ':'▼ ')+fmt(Math.abs(vsAnt))}</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td><td>—</td></tr>`;
+  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
+  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${p.label}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
   // Category bars
   const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+x.monto;});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
   const ingY=S.ingresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
@@ -9696,7 +9724,7 @@ function showLoadingOverlay(show){
     el = document.createElement('div');
     el.id = 'fb-loading';
     el.style.cssText = 'position:fixed;inset:0;z-index:999998;background:#020510;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
-    el.innerHTML = '<div style="width:48px;height:48px;border:3px solid rgba(129,140,248,.2);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;"></div><div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#818cf8;letter-spacing:.15em;text-transform:uppercase;">Sincronizando con la nube...</div>';
+    el.innerHTML = '<div style="width:48px;height:48px;border:3px solid rgba(129,140,248,.2);border-top-color:#818cf8;border-radius:50%;animation:spin .8s linear infinite;"></div><div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#818cf8;letter-spacing:.15em;text-transform:uppercase;">Sincronizando con la nube... <span style="color:#fdc901;">V2.0</span></div>';
     document.body.appendChild(el);
     if(!document.getElementById('spin-style')){
       const st=document.createElement('style');st.id='spin-style';
