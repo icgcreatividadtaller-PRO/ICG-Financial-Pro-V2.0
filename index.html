@@ -3947,6 +3947,20 @@ function crearFacturaAnulada(ncf, fecha, cliente){
   });
   save(); renderCXC();
 }
+// "Registro Histórico" — factura real que sabemos que ya se cobró, pero se registra solo para
+// completar la secuencia de NCF (útil al cargar una V2 desde cero). Se crea directamente como
+// "Pagada", SIN generar ningún Ingreso ni tocar ninguna cuenta bancaria — por diseño, para no
+// mezclar cifras históricas con los totales reales del Estado de Resultados de este sistema.
+function crearFacturaHistorica(datos){
+  S.cuentasCobrar.push({
+    id:Date.now()+Math.random(), invoice:datos.ncf, client:datos.cliente||'(Sin especificar)', clientId:datos.clientId||null,
+    desc:datos.desc||'', categoria:datos.categoria||'otros', issued:datos.issued||today(), due:datos.due||today(),
+    creditDays:datos.creditDays||0, amount:datos.amount||0, subtotal:datos.subtotal||0, itbis:datos.itbis||0,
+    estado:'pagada', paidDate:datos.due||datos.issued||today(), payMethod:'historico', payBankIdx:null, pagos:[],
+    tipoVenta:'corporativa'
+  });
+  save(); renderCXC();
+}
 
 // ── Secuencia de NCF ──
 // Asume el formato estándar de la DGII: prefijo (letra + tipo) + 8 dígitos correlativos.
@@ -6677,16 +6691,9 @@ function renderRevisionFactura(){
 
   const avisoAnulada = p.anulada
     ? `<div style="background:rgba(107,122,153,.1);border:1px solid rgba(107,122,153,.4);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#c0c6d8;">
-        🏷️ <strong>El sistema detectó la palabra "ANULADA"</strong> en esta factura. Se va a registrar en RD$0.00, sin afectar tus Ingresos ni Balance — solo para dejar el número en tu secuencia. Los campos de monto de abajo quedan deshabilitados porque no aplican.
-        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
-          <input type="checkbox" id="cf-es-anulada" onchange="toggleCfAnulada()"> En realidad NO está anulada — es una factura válida (habilitar montos)
-        </label>
+        🏷️ <strong>El sistema detectó la palabra "ANULADA"</strong> en esta factura. Marca abajo si en realidad es válida.
       </div>`
-    : `<div style="margin-bottom:12px;">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8899bb;">
-          <input type="checkbox" id="cf-es-anulada" onchange="toggleCfAnulada()"> Esta factura en realidad está anulada (deshabilitar montos)
-        </label>
-      </div>`;
+    : '';
 
   const avisoGap = gap
     ? `<div style="background:rgba(253,201,1,.08);border:1px solid rgba(253,201,1,.35);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#f0dba0;">
@@ -6713,6 +6720,14 @@ function renderRevisionFactura(){
       <div class="form-group"><label>Subtotal (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-subtotal" value="${fmtInputNum(p.subtotal)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
       <div class="form-group"><label>ITBIS (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-itbis" value="${fmtInputNum(p.itbis)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
       <div class="form-group"><label>Total (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-total" value="${fmtInputNum(p.total)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
+      <div class="form-group" style="background:rgba(129,140,248,.05);border:1px solid rgba(129,140,248,.25);border-radius:8px;padding:10px 12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8899bb;margin-bottom:8px;">
+          <input type="checkbox" id="cf-es-anulada" onchange="toggleCfAnulada();if(this.checked)document.getElementById('cf-es-historico').checked=false;"> Esta factura está anulada
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#8899bb;" title="Se registra directamente como Pagada en CxC, solo para completar tu secuencia de NCF — no genera ningún Ingreso ni toca ninguna cuenta bancaria.">
+          <input type="checkbox" id="cf-es-historico" onchange="if(this.checked)document.getElementById('cf-es-anulada').checked=false;"> Factura para Registro Histórico
+        </label>
+      </div>
     </div>
     <details style="margin-top:14px;">
       <summary style="cursor:pointer;font-size:11px;color:#6b7a99;text-transform:uppercase;letter-spacing:.06em;">Ver texto detectado</summary>
@@ -6745,6 +6760,7 @@ async function confirmarCargaFactura(){
   const itbis=numVal('cf-itbis');
   const total=numVal('cf-total');
   const esAnulada = _cf.anuladaOverride!=null ? _cf.anuladaOverride : !!_cf.parsed?.anulada;
+  const esHistorico = !!document.getElementById('cf-es-historico')?.checked;
 
   if(!ncf){ notify('error','Falta el NCF','No se detectó — escríbelo a mano antes de continuar.'); return; }
 
@@ -6778,6 +6794,16 @@ async function confirmarCargaFactura(){
   }
   if(!clienteNombre && !esAnulada){ notify('error','Falta el Cliente','Selecciona o escribe el cliente de esta factura.'); return; }
 
+  // Se valida la Categoría AQUÍ, antes de cerrar el modal — antes esto se validaba más
+  // adelante (dentro de addCXC), pero para entonces el modal ya se había cerrado, perdiendo
+  // todo lo escrito. Con icgAlert (no un aviso flotante que desaparece solo) el usuario ve el
+  // mensaje, le da OK, y puede corregir la Categoría sin tener que volver a cargar el PDF.
+  if(!esAnulada && !document.getElementById('cf-categoria')?.value){
+    await icgAlert('Falta seleccionar la Categoría de esta factura. Elígela antes de confirmar.','Falta la Categoría');
+    document.getElementById('cf-categoria')?.focus();
+    return;
+  }
+
   closeCargarFacturaModal();
 
   if(esAnulada){
@@ -6788,6 +6814,19 @@ async function confirmarCargaFactura(){
     }
     crearFacturaAnulada(ncf, fechaEmision, clienteNombre);
     notify('success','Factura Anulada Registrada',`${ncf} quedó marcada como Anulada.`);
+    return;
+  }
+
+  if(esHistorico){
+    if(S.cuentasCobrar.some(x=>(x.invoice||'').toUpperCase()===ncf.toUpperCase())){
+      notify('error','Número Duplicado',`La factura "${ncf}" ya existe en el sistema.`);
+      return;
+    }
+    crearFacturaHistorica({
+      ncf, cliente:clienteNombre, clientId:clienteIdFinal, desc, categoria,
+      issued:fechaEmision, due:fechaVencimiento, subtotal, itbis, amount:total
+    });
+    notify('success','Factura Histórica Registrada',`${ncf} quedó marcada como Pagada — no se generó ningún Ingreso ni movimiento bancario.`);
     return;
   }
 
