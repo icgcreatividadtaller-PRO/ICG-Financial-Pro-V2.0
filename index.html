@@ -933,14 +933,14 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="">Sin categoría</option>
             <option value="pago_tarjeta">Pago de Tarjeta</option>
             <option value="materiales">Materiales</option>
-            <option value="nomina">Nómina & Salarios</option>
+            <option value="nomina">Nómina Administrativa</option>
             <option value="alquiler">Alquiler</option>
             <option value="luz">Electricidad</option>
             <option value="internet">Internet</option>
             <option value="telefono">Teléfono</option>
             <option value="combustible">Combustible</option>
             <option value="equipos">Equipos</option>
-            <option value="subcontratacion">Subcontratación</option>
+            <option value="subcontratacion">Nómina de Producción</option>
             <option value="publicidad">Publicidad</option>
             <option value="impuestos">Impuestos</option>
             <option value="contabilidad">Contabilidad</option>
@@ -952,7 +952,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="instalacion">Instalación</option>
             <option value="personal">Gasto Personal</option>
             <option value="suscripcion">Suscripción</option>
-            <option value="otros">Otros</option>
           </select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomCCCat()" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
         </div>
@@ -1153,7 +1152,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <button class="acct-tab active" id="cxp-tab-proveedores"    onclick="switchCXP('proveedores')">Proveedores</button>
     <button class="acct-tab"        id="cxp-tab-serviciosFijos" onclick="switchCXP('serviciosFijos')">Servicios Fijos</button>
     <button class="acct-tab"        id="cxp-tab-prestamos"      onclick="switchCXP('prestamos')">Préstamos</button>
-    <button class="acct-tab"        id="cxp-tab-otros"          onclick="switchCXP('otros')">Otros</button>
+    <button class="acct-tab"        id="cxp-tab-otros"          onclick="switchCXP('otros')">Varios</button>
   </div>
 
   <!-- ADD FORM -->
@@ -1311,6 +1310,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Categoría</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="ing-categoria" style="font-size:15px;flex:1;min-width:0;height:44px;box-sizing:border-box;">
+            <option value="">— Selecciona —</option>
             <option value="offset">Impresión Offset</option>
             <option value="rot_vehicular">Rotulación Vehicular</option>
             <option value="senaletica">Señalética</option>
@@ -1320,7 +1320,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="rotulos3d">Rótulos 3D PVC</option>
             <option value="cristales">Rotulación Cristales y Murales</option>
             <option value="acrilicas">Placas Acrílicas</option>
-            <option value="otros">Otros</option>
           </select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomCategory('ing')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
         </div>
@@ -1388,7 +1387,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
           <option value="rotulos3d">Rótulos 3D PVC</option>
           <option value="cristales">Cristales y Murales</option>
           <option value="acrilicas">Placas Acrílicas</option>
-          <option value="otros">Otros</option>
         </select>
       </div>
       <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('ing-filter-search').value='';document.getElementById('ing-filter-mes').value='';document.getElementById('ing-filter-cat').value='';renderIngresos()">Limpiar</button>
@@ -1516,15 +1514,16 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Categoría</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="egr-categoria" style="flex:1;height:44px;box-sizing:border-box;">
+            <option value="">— Selecciona —</option>
             <option value="materiales">Materiales & Suministros</option>
-            <option value="nomina">Nómina & Salarios</option>
+            <option value="nomina">Nómina Administrativa</option>
             <option value="alquiler">Alquiler & Local</option>
             <option value="luz">Electricidad</option>
             <option value="internet">Internet</option>
             <option value="telefono">Teléfono</option>
             <option value="combustible">Combustible</option>
             <option value="equipos">Equipos & Mantenimiento</option>
-            <option value="subcontratacion">Subcontratación</option>
+            <option value="subcontratacion">Nómina de Producción</option>
             <option value="publicidad">Publicidad & Marketing</option>
             <option value="impuestos">Impuestos</option>
             <option value="contabilidad">Contabilidad</option>
@@ -1534,7 +1533,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="impresion_digital">Impresión Digital</option>
             <option value="rotulacion_egr">Rotulación</option>
             <option value="instalacion">Instalación</option>
-            <option value="otros">Otros</option>
           </select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomCategory('egr')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#ef4444;border-color:rgba(239,68,68,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
         </div>
@@ -1607,19 +1605,18 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <select id="egr-filter-cat" autocomplete="off" onchange="renderEgresos()" style="width:170px;">
           <option value="">Todas</option>
           <option value="materiales">Materiales</option>
-          <option value="nomina">Nómina</option>
+          <option value="nomina">Nómina Administrativa</option>
           <option value="alquiler">Alquiler</option>
           <option value="luz">Electricidad</option>
           <option value="internet">Internet</option>
           <option value="telefono">Teléfono</option>
           <option value="combustible">Combustible</option>
           <option value="equipos">Equipos</option>
-          <option value="subcontratacion">Subcontratación</option>
+          <option value="subcontratacion">Nómina de Producción</option>
           <option value="publicidad">Publicidad</option>
           <option value="impuestos">Impuestos</option>
           <option value="contabilidad">Contabilidad</option>
           <option value="transporte">Transportación</option>
-          <option value="otros">Otros</option>
         </select>
       </div>
       <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('egr-filter-search').value='';document.getElementById('egr-filter-mes').value='';document.getElementById('egr-filter-cat').value='';renderEgresos()">Limpiar</button>
@@ -1835,6 +1832,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;" id="bg-columnas"></div>
 
   <div id="bg-cuadre" style="margin-bottom:24px;"></div>
+  <div id="bg-solvencia" style="margin-bottom:24px;"></div>
 
   <div class="add-form" style="margin-bottom:24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleBgDiagnostico()">
@@ -1982,10 +1980,44 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
   <!-- Sub-tabs -->
   <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:22px;" id="contabSubTabs">
     <button class="acct-tab active" id="contab-tab-plan"         onclick="switchContab('plan')">Plan de Cuentas</button>
+    <button class="acct-tab"        id="contab-tab-impuestos"    onclick="switchContab('impuestos')">Resumen de Impuestos</button>
     <button class="acct-tab"        id="contab-tab-diario"       onclick="switchContab('diario')">Libro Diario</button>
     <button class="acct-tab"        id="contab-tab-mayor"        onclick="switchContab('mayor')">Libro Mayor</button>
     <button class="acct-tab"        id="contab-tab-distribucion" onclick="switchContab('distribucion')">Distribución de Utilidades</button>
     <button class="acct-tab"        id="contab-tab-seguridad"    onclick="switchContab('seguridad')">Seguridad</button>
+  </div>
+
+  <!-- RESUMEN DE IMPUESTOS ── ITBIS (mensual), Anticipo ISR (mensual), ISR Anual, TSS/INFOTEP
+       (listos para cuando haya empleados) — usa las categorías reservadas que ya existen, sin
+       duplicar nada. Los impuestos en RD no siguen todos el mismo calendario, así que cada
+       tarjeta indica su propia periodicidad en vez de asumir "todo es mensual". -->
+  <div id="impuestosView" style="display:none;">
+    <div class="form-group" style="width:140px;margin-bottom:16px;"><label>Año</label>
+      <select id="imp-year" onchange="renderResumenImpuestos()"></select>
+    </div>
+    <div class="add-form" style="margin-bottom:18px;">
+      <h3>ITBIS <span style="font-size:13px;color:#6b7a99;font-weight:400;">— declaración mensual</span></h3>
+      <div class="balance-cards" style="margin-top:10px;">
+        <div class="bcard" style="border-color:rgba(253,201,1,.3);"><div class="bcard-label">ITBIS Cobrado (año)</div><div class="bcard-value" style="color:#fdc901;" id="imp-itbis-cobrado">RD$0.00</div></div>
+        <div class="bcard"><div class="bcard-label">Crédito Fiscal (año)</div><div class="bcard-value positive" id="imp-itbis-credito">RD$0.00</div></div>
+        <div class="bcard"><div class="bcard-label">Remesas Pagadas (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-itbis-remesas">RD$0.00</div></div>
+        <div class="bcard" style="border-color:rgba(239,68,68,.3);"><div class="bcard-label">ITBIS por Pagar (saldo actual)</div><div class="bcard-value negative" id="imp-itbis-porpagar">RD$0.00</div></div>
+      </div>
+    </div>
+    <div class="add-form" style="margin-bottom:18px;">
+      <h3>ISR <span style="font-size:13px;color:#6b7a99;font-weight:400;">— anticipo mensual, declaración (IR-3) anual</span></h3>
+      <div class="balance-cards" style="margin-top:10px;">
+        <div class="bcard"><div class="bcard-label">Anticipos ISR Pagados (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-isr-anticipos">RD$0.00</div></div>
+        <div class="bcard"><div class="bcard-label">ISR Anual Pagado (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-isr-anual">RD$0.00</div></div>
+      </div>
+    </div>
+    <div class="add-form" style="margin-bottom:0;">
+      <h3>Nómina — TSS / INFOTEP <span style="font-size:13px;color:#6b7a99;font-weight:400;">— listo para cuando registres empleados</span></h3>
+      <div class="balance-cards" style="margin-top:10px;">
+        <div class="bcard"><div class="bcard-label">Aporte Patronal TSS (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-tss">RD$0.00</div></div>
+        <div class="bcard"><div class="bcard-label">Aporte Patronal INFOTEP (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-infotep">RD$0.00</div></div>
+      </div>
+    </div>
   </div>
 
   <!-- PLAN DE CUENTAS VIEW -->
@@ -2016,6 +2048,13 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <div class="table-wrap"><table>
         <thead><tr><th>Categoría</th><th>Cuenta Contable</th></tr></thead>
         <tbody id="mapTarjetaBody"></tbody>
+      </table></div>
+    </div>
+    <div class="transactions-section" style="margin-top:18px;">
+      <h3>Categorías de Egresos → Tipo de Costo <span title="Costo Directo: lo que cuesta producir el trabajo en sí (materiales, subcontratación). Gasto Operativo: lo que cuesta mantener el taller abierto, sin importar cuánto factures (renta, nómina administrativa). Separa el Margen Bruto del Margen Neto en Estado de Resultados." style="cursor:help;">ⓘ</span></h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Categoría</th><th>Tipo de Costo</th></tr></thead>
+        <tbody id="mapCostoDirectoBody"></tbody>
       </table></div>
     </div>
   </div>
@@ -2259,13 +2298,15 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <div class="form-group" style="grid-column:span 2;"><label>Nombre / Razón Social *</label><input autocomplete="off" type="text" id="sup-nombre" placeholder="Nombre del suplidor..."></div>
       <div class="form-group"><label>RNC / Cédula</label><input autocomplete="off" type="text" id="sup-rnc" placeholder="000-0000000-0"></div>
       <div class="form-group"><label>Categoría</label>
-        <select id="sup-categoria">
-          <option value="materiales">Materiales & Suministros</option>
-          <option value="servicios">Servicios</option>
-          <option value="equipos">Equipos & Tecnología</option>
-          <option value="freelancer">Freelancer / Subcontrato</option>
-          <option value="otros">Otros</option>
-        </select>
+        <div style="display:flex;gap:6px;height:44px;">
+          <select id="sup-categoria" style="flex:1;min-width:0;height:44px;box-sizing:border-box;">
+            <option value="materiales">Materiales & Suministros</option>
+            <option value="servicios">Servicios</option>
+            <option value="equipos">Equipos & Tecnología</option>
+            <option value="freelancer">Freelancer / Subcontrato</option>
+          </select>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomSupplierCat()" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#4f46e5;border-color:rgba(79,70,229,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
+        </div>
       </div>
       <div class="form-group"><label>Email</label><input autocomplete="off" type="email" id="sup-email" placeholder="correo@suplidor.com"></div>
       <div class="form-group"><label>Teléfono</label><input autocomplete="off" type="text" id="sup-tel" placeholder="(809) 000-0000"></div>
@@ -2652,6 +2693,8 @@ function defaultState() {
     egresos:    [],
     categoriasIngresos: [],
     categoriasEgresos:  [],
+    categoriasCostoDirecto: {}, // overrides de Directo/Operativo por categoría — vacío = usa los valores por defecto
+    categoriasSuplidorTipo: [],
     catAccountMap: { ingresos:{}, egresos:{}, tarjeta:{} },
     distribuciones: [],
     securityPin: null,
@@ -3974,7 +4017,7 @@ function crearFacturaAnulada(ncf, fecha, cliente){
 function crearFacturaHistorica(datos){
   S.cuentasCobrar.push({
     id:Date.now()+Math.random(), invoice:datos.ncf, client:datos.cliente||'(Sin especificar)', clientId:datos.clientId||null,
-    desc:datos.desc||'', categoria:datos.categoria||'otros', issued:datos.issued||today(), due:datos.due||today(),
+    desc:datos.desc||'', categoria:datos.categoria||'', issued:datos.issued||today(), due:datos.due||today(),
     creditDays:datos.creditDays||0, amount:datos.amount||0, subtotal:datos.subtotal||0, itbis:datos.itbis||0,
     estado:'pagada', paidDate:datos.due||datos.issued||today(), payMethod:'historico', payBankIdx:null, pagos:[],
     tipoVenta:'corporativa'
@@ -4442,7 +4485,7 @@ const CXP_CONFIG = {
       {id:'vence',     label:'Fecha Vencimiento',       type:'date',  span:1},
       {id:'metodo',    label:'Forma de Pago',           type:'select',span:1, options:['Transferencia','Efectivo','Cheque','Tarjeta de Crédito']},
       {id:'referencia',label:'RNC / Referencia',        type:'text',  span:2, placeholder:'RNC del proveedor o referencia...'},
-      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Materiales','Nómina','Alquiler','Electricidad','Internet','Teléfono','Combustible','Equipos','Subcontratación','Publicidad','Impuestos','Contabilidad','Transportación','Otros']},
+      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Materiales','Nómina Administrativa','Alquiler','Electricidad','Internet','Teléfono','Combustible','Equipos','Nómina de Producción','Publicidad','Impuestos','Contabilidad','Transportación']},
     ],
     headers: ['Proveedor','Concepto','Categoría','Monto','Fecha','Método','Cuenta','Estado',''],
   },
@@ -4458,7 +4501,7 @@ const CXP_CONFIG = {
       {id:'fecha',     label:'Fecha del Período',        type:'date',  span:1},
       {id:'vence',     label:'Fecha Vencimiento',        type:'date',  span:1},
       {id:'metodo',    label:'Forma de Pago',            type:'select',span:1, options:['Transferencia','Efectivo','Tarjeta de Crédito','Débito Automático']},
-      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Electricidad','Internet','Teléfono','Alquiler','Combustible','Materiales','Nómina','Impuestos','Otros']},
+      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Electricidad','Internet','Teléfono','Alquiler','Combustible','Materiales','Nómina Administrativa','Impuestos']},
     ],
     headers: ['Servicio','N° Cuenta','Descripción','Categoría','Monto','Período','Vencimiento','Método','Cuenta Pago','Estado',''],
   },
@@ -4479,8 +4522,8 @@ const CXP_CONFIG = {
     headers: ['Entidad','Préstamo','Categoría','Cuota','Saldo','Vencimiento','Tasa','Cuenta','Estado',''],
   },
   otros: {
-    title: 'Otro',
-    tableTitle: 'Otros',
+    title: 'Registro Vario',
+    tableTitle: 'Varios',
     icon: '📋',
     fields: [
       {id:'nombre',    label:'Nombre / A quién',        type:'suplidor-select', span:2, placeholder:'Nombre de la obligación...'},
@@ -4490,7 +4533,7 @@ const CXP_CONFIG = {
       {id:'vence',     label:'Vencimiento',             type:'date',  span:1},
       {id:'metodo',    label:'Forma de Pago',           type:'select',span:1, options:['Transferencia','Efectivo','Cheque','Tarjeta de Crédito']},
       {id:'referencia',label:'Referencia / Nota',       type:'text',  span:2, placeholder:'Número de referencia u observación...'},
-      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Otros','Materiales','Nómina','Impuestos','Contabilidad','Transportación','Subcontratación','Publicidad']},
+      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Materiales','Nómina Administrativa','Impuestos','Contabilidad','Transportación','Nómina de Producción','Publicidad']},
     ],
     headers: ['Nombre','Concepto','Categoría','Monto','Fecha','Método','Cuenta','Estado',''],
   }
@@ -4527,7 +4570,8 @@ function buildCXPForm(section){
       input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;"><option value="">— Seleccionar —</option>${opts}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openSuplidorModal()" style="border-color:rgba(129,140,248,.3);color:#818cf8;padding:10px 12px;flex-shrink:0;white-space:nowrap;">+ Nuevo</button></div>`;
     } else if(f.type==='select'){
       const opts = f.id==='categoriaEgreso' ? [...f.options].sort((a,b)=>a.localeCompare(b,'es')) : f.options;
-      input = `<select id="cxp-f-${f.id}">${opts.map(o=>`<option value="${o.toLowerCase().replace(/ /g,'_')}">${o}</option>`).join('')}</select>`;
+      const blank = f.id==='categoriaEgreso' ? '<option value="">— Selecciona —</option>' : '';
+      input = `<select id="cxp-f-${f.id}">${blank}${opts.map(o=>`<option value="${o.toLowerCase().replace(/ /g,'_')}">${o}</option>`).join('')}</select>`;
     } else if(f.type==='date'){
       input = `<input autocomplete="off" type="date" id="cxp-f-${f.id}" value="${today()}" onclick="cdpOpen(this,event)">`;
     } else if(f.type==='number' && (f.id==='monto'||f.id==='saldo')){
@@ -4583,6 +4627,10 @@ function addCXP(){
     else fieldsData[f.id] = f.type==='number' ? (parseFloat(el?.value)||0) : (el?.value||'');
   });
   if(!fieldsData.nombre || !fieldsData.monto){ notify('error','Campos Requeridos','Completa al menos Nombre y Monto.'); return; }
+  if(cfg.fields.some(f=>f.id==='categoriaEgreso') && !fieldsData.categoriaEgreso){
+    notify('error','Falta la Categoría','Selecciona una Categoría de Egreso específica — no se permite dejarla en blanco.');
+    return;
+  }
 
   if(isEditing){
     const item = S.cuentasPagar[_cxpSection].find(x=>x.id===_editingCXPId);
@@ -4894,7 +4942,7 @@ function renderCXP(){
   const acctName = x => `<span style="color:#8899bb;">${S.accounts[x.payAccountIdx]?.name||'—'}</span>`;
   const catLabel = x => {
     if(!x.categoriaEgreso) return '<span style="color:#6b7a99;">—</span>';
-    const key = CXP_CAT_LABEL_TO_KEY[x.categoriaEgreso] || 'otros';
+    const key = CXP_CAT_LABEL_TO_KEY[x.categoriaEgreso] || '';
     const label = EGR_CAT_LABELS[key] || (S.categoriasEgresos||[]).find(c=>c.key===key)?.label || x.categoriaEgreso;
     return `<span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(label)}</span>`;
   };
@@ -5194,6 +5242,25 @@ function renderBalanceGeneral(){
   document.getElementById('bg-cuadre').innerHTML = cuadra
     ? `<div style="border:2px solid rgba(74,222,128,.4);border-radius:12px;padding:16px;text-align:center;color:#4ade80;font-weight:600;">✅ El Balance cuadra — Activos = Pasivos + Capital</div>`
     : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — revisa los montos manuales (Activos Fijos), movimientos marcados como "Histórico", o ajustes de "Corte de Balance".</div>`;
+
+  // Índice de Solvencia = Activos Totales ÷ Pasivos Totales — >1 significa que tienes más de lo
+  // que debes (bien); <1 significa que debes más de lo que tienes (alerta).
+  const solvencia = totalPasivos>0 ? totalActivos/totalPasivos : (totalActivos>0?Infinity:0);
+  const solvColor = solvencia>=1.5 ? '#4ade80' : solvencia>=1 ? '#fdc901' : '#ef4444';
+  const solvTexto = solvencia>=1.5 ? 'Buena — tienes bastante margen sobre tus deudas.'
+    : solvencia>=1 ? 'Aceptable, pero con poco margen para imprevistos.'
+    : 'Alerta — debes más de lo que posees.';
+  document.getElementById('bg-solvencia').innerHTML = `
+    <div class="add-form" style="margin-bottom:0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h3 style="margin-bottom:4px;">Índice de Solvencia <span title="Activos Totales ÷ Pasivos Totales — mide tu capacidad de cubrir todas tus deudas (no solo las de corto plazo) con lo que posees.">ⓘ</span></h3>
+        <p style="font-size:14px;color:#9ca3af;margin:0;">${solvTexto}</p>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:32px;font-weight:800;color:${solvColor};font-family:var(--mono);">${solvencia===Infinity?'∞':solvencia.toFixed(2)}</div>
+        <div style="font-size:12px;color:#6b7a99;text-transform:uppercase;letter-spacing:.08em;">${fmt(totalActivos)} ÷ ${fmt(totalPasivos)}</div>
+      </div>
+    </div>`;
 
   document.getElementById('bg-af-tbody').innerHTML = S.activosFijos.length ? S.activosFijos.map(x=>
     `<tr><td>${esc(x.nombre)}</td><td class="td-mono">${x.fecha?fmtDate(x.fecha):'—'}</td><td class="td-mono">${fmt(x.monto)}</td><td style="white-space:nowrap;"><button class="del-btn" style="color:#818cf8;" onclick="editActivoFijo(${x.id})" title="Editar">✏️</button><button class="del-btn" onclick="delActivoFijo(${x.id})" title="Eliminar">×</button></td></tr>`
@@ -5915,7 +5982,16 @@ let _editingSuplidorId=null;
 function openSuplidorModal(id=null){
   _editingSuplidorId=id;const s=id?S.suplidores.find(x=>x.id===id):{};
   ['nombre','rnc','email','tel','dir'].forEach(f=>{const el=document.getElementById(`sup-${f}`);if(el)el.value=s?.[f]||'';});
-  document.getElementById('sup-categoria').value=s?.categoria||'materiales';
+  const catSel=document.getElementById('sup-categoria');
+  // Vuelve a poner las opciones base + las personalizadas ya creadas, sin duplicar si se abre varias veces
+  const base=['materiales','servicios','equipos','freelancer'];
+  catSel.querySelectorAll('option').forEach(o=>{ if(!base.includes(o.value)) o.remove(); });
+  (S.categoriasSuplidorTipo||[]).forEach(c=>{
+    if(!catSel.querySelector(`option[value="${c.key}"]`)){
+      const opt=document.createElement('option'); opt.value=c.key; opt.textContent=c.label; catSel.appendChild(opt);
+    }
+  });
+  catSel.value=s?.categoria||'materiales';
   document.getElementById('suplidorModal').classList.add('open');
 }
 function saveSuplidor(){
@@ -5943,13 +6019,30 @@ function renderSuplidores(){
   list.sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const tbody=document.getElementById('sup-tbody');if(!tbody)return;
   const egrTotal=id=>S.egresos.filter(x=>x.suplidorId===id).reduce((s,x)=>s+x.monto,0);
-  const catL={materiales:'Materiales',servicios:'Servicios',equipos:'Equipos',freelancer:'Freelancer',otros:'Otros'};
+  const catL={materiales:'Materiales',servicios:'Servicios',equipos:'Equipos',freelancer:'Freelancer',...Object.fromEntries((S.categoriasSuplidorTipo||[]).map(c=>[c.key,c.label]))};
   tbody.innerHTML=list.length?list.map(s=>`<tr><td><strong>${esc(s.nombre)}</strong></td><td class="td-mono">${esc(s.rnc)||'—'}</td><td><span class="badge" style="background:rgba(79,70,229,.12);color:#4f46e5;">${catL[s.categoria]||esc(s.categoria)}</span></td><td>${esc(s.email)||'—'}</td><td>${esc(s.tel)||'—'}</td><td class="td-mono negative">${fmt(egrTotal(s.id))}</td><td style="display:flex;gap:4px;"><button class="del-btn" onclick="openSuplidorModal(${s.id})">✎</button><button class="del-btn" onclick="deleteSuplidor(${s.id})">×</button></td></tr>`).join(''):`<tr><td colspan="7"><div class="empty-state">Sin suplidores registrados.</div></td></tr>`;
 }
 
 // ══════════════════ INGRESOS ══════════════════
-const ING_CAT_LABELS={offset:'Impresión Offset',rot_vehicular:'Rotulación Vehicular',senaletica:'Señalética',rotulos_gen:'Rótulos Genéricos',diseño:'Diseño & Branding',exterior:'Publicidad Exterior',rotulos3d:'Rótulos 3D PVC',cristales:'Rotulación Cristales y Murales',acrilicas:'Placas Acrílicas',otros:'Otros'};
-const EGR_CAT_LABELS={materiales:'Materiales',nomina:'Nómina',alquiler:'Alquiler',luz:'Electricidad',internet:'Internet',telefono:'Teléfono',combustible:'Combustible',equipos:'Equipos',subcontratacion:'Subcontratación',publicidad:'Publicidad',impuestos:'Impuestos',contabilidad:'Contabilidad',transporte:'Transportación',impresion_offset:'Impresión Offset',impresion_gran_formato:'Gran Formato',impresion_digital:'Impresión Digital',rotulacion_egr:'Rotulación',instalacion:'Instalación',otros:'Otros'};
+const ING_CAT_LABELS={offset:'Impresión Offset',rot_vehicular:'Rotulación Vehicular',senaletica:'Señalética',rotulos_gen:'Rótulos Genéricos',diseño:'Diseño & Branding',exterior:'Publicidad Exterior',rotulos3d:'Rótulos 3D PVC',cristales:'Rotulación Cristales y Murales',acrilicas:'Placas Acrílicas'};
+const EGR_CAT_LABELS={materiales:'Materiales',nomina:'Nómina Administrativa',alquiler:'Alquiler',luz:'Electricidad',internet:'Internet',telefono:'Teléfono',combustible:'Combustible',equipos:'Equipos',subcontratacion:'Nómina de Producción',publicidad:'Publicidad',impuestos:'Impuestos',contabilidad:'Contabilidad',transporte:'Transportación',impresion_offset:'Impresión Offset',impresion_gran_formato:'Gran Formato',impresion_digital:'Impresión Digital',rotulacion_egr:'Rotulación',instalacion:'Instalación'};
+// Costo Directo (lo que cuesta producir el trabajo en sí) vs Gasto Operativo (lo que cuesta
+// mantener el taller abierto, sin importar cuánto factures) — separa Margen Bruto de Margen
+// Neto. Son valores por DEFECTO; el usuario los puede ajustar en Contabilidad → Resumen de
+// Impuestos... digo, en la tabla de "Categorías de Egresos → Tipo de Costo".
+const EGR_TIPO_COSTO_DEFAULT={
+  materiales:'directo', subcontratacion:'directo', impresion_offset:'directo', impresion_gran_formato:'directo',
+  impresion_digital:'directo', rotulacion_egr:'directo', instalacion:'directo', combustible:'directo',
+  nomina:'operativo', alquiler:'operativo', luz:'operativo', internet:'operativo', telefono:'operativo',
+  equipos:'operativo', publicidad:'operativo', impuestos:'operativo', contabilidad:'operativo',
+  transporte:'operativo', otros:'operativo',
+  salario_titular:'operativo', aporte_tss:'operativo', aporte_infotep:'operativo', itbis:'operativo',
+  anticipo_isr:'operativo', isr_anual:'operativo', prestamos:'operativo'
+};
+function getTipoCosto(categoriaKey){
+  if(S.categoriasCostoDirecto && S.categoriasCostoDirecto[categoriaKey]) return S.categoriasCostoDirecto[categoriaKey];
+  return EGR_TIPO_COSTO_DEFAULT[categoriaKey] || 'operativo';
+}
 
 // ══════════════════ PLAN DE CUENTAS ══════════════════
 // Categorías reservadas cuyo código contable NUNCA se remapea desde la UI
@@ -6062,6 +6155,19 @@ function addCustomCategory(type){
     document.getElementById('egr-categoria').value=key;
   }
 }
+function addCustomSupplierCat(){
+  const name=prompt('Nueva categoría de Suplidor:');
+  if(!name||!name.trim())return;
+  const label=name.trim();
+  const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  if(!S.categoriasSuplidorTipo) S.categoriasSuplidorTipo=[];
+  if(S.categoriasSuplidorTipo.some(c=>c.key===key))return notify('info','Ya existe','Esa categoría ya está en la lista.');
+  S.categoriasSuplidorTipo.push({key,label});
+  save();
+  const sel=document.getElementById('sup-categoria');
+  const opt=document.createElement('option'); opt.value=key; opt.textContent=label;
+  sel.appendChild(opt); sel.value=key;
+}
 
 function refreshIngresoSelects(){
   const sel=document.getElementById('ing-cliente');if(!sel)return;
@@ -6082,7 +6188,7 @@ function refreshIngresoSelects(){
   const recCatSel=document.getElementById('rec-categoria');
   if(recCatSel){
     const curVal=recCatSel.value;
-    recCatSel.innerHTML=getSelectableIngCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableIngCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
     if(curVal && recCatSel.querySelector(`option[value="${curVal}"]`)) recCatSel.value=curVal;
   }
 }
@@ -6107,6 +6213,7 @@ function addIngreso(auto=false,data={}){
   const cuentaIdx=auto?data.cuentaIdx:(esHistorico?null:(parseInt(cuentaSelVal)||0));
   const tipoVenta=auto?(data.tipoVenta||'corporativa'):(document.getElementById('ing-tipoventa')?.value||'corporativa');
   if(!fecha||monto<=0){if(!auto)notify('error','Campos Requeridos','Completa la Fecha y el Monto para continuar.');return;}
+  if(!auto && !cat){ notify('error','Falta la Categoría','Selecciona una categoría específica — no se permite dejarla en blanco.'); document.getElementById('ing-categoria')?.focus(); return; }
 
   const guardar=()=>{
     const cliente=S.clientes.find(x=>x.id===clienteId);
@@ -6168,6 +6275,7 @@ function addRecibo(){
   const ref=document.getElementById('rec-ref').value.trim();
   const tipoVenta=document.getElementById('rec-tipoventa')?.value||'corporativa';
   if(!fecha||monto<=0){ notify('error','Campos Requeridos','Completa la Fecha y el Monto para continuar.'); return; }
+  if(!cat){ notify('error','Falta la Categoría','Selecciona una categoría específica — no se permite dejarla en blanco.'); document.getElementById('rec-categoria')?.focus(); return; }
   const cliente=S.clientes.find(x=>x.id===clienteId);
 
   S.recibosCounter=(S.recibosCounter||0)+1;
@@ -7634,7 +7742,7 @@ function refreshEgresoSelects(){
   const recCatSel=document.getElementById('recegr-categoria');
   if(recCatSel){
     const curVal=recCatSel.value;
-    recCatSel.innerHTML=getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
     if(curVal && recCatSel.querySelector(`option[value="${curVal}"]`)) recCatSel.value=curVal;
   }
 }
@@ -7653,6 +7761,7 @@ function addEgreso(auto=false,data={}){
   const esHistorico=!auto&&!isTarjeta&&cuentaSelVal==='none';
   const cuentaIdx=auto?data.cuentaIdx:(isTarjeta?null:(esHistorico?null:(parseInt(cuentaSelVal)||0)));
   if(!fecha||monto<=0){if(!auto)notify('error','Campos Requeridos','Completa la Fecha y el Monto para continuar.');return;}
+  if(!auto && !cat){ notify('error','Falta la Categoría','Selecciona una categoría específica — no se permite dejarla en blanco.'); document.getElementById('egr-categoria')?.focus(); return; }
 
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
@@ -7748,6 +7857,7 @@ function addReciboEgreso(){
   const cuentaIdx=esHistorico?null:(parseInt(cuentaSelVal)||0);
   const ref=document.getElementById('recegr-ref').value.trim();
   if(!fecha||monto<=0){ notify('error','Campos Requeridos','Completa la Fecha y el Monto para continuar.'); return; }
+  if(!cat){ notify('error','Falta la Categoría','Selecciona una categoría específica — no se permite dejarla en blanco.'); document.getElementById('recegr-categoria')?.focus(); return; }
   const suplidor=S.suplidores.find(x=>x.id===suplidorId);
 
   S.recibosEgresoCounter=(S.recibosEgresoCounter||0)+1;
@@ -7924,15 +8034,24 @@ function renderRentabilidad(){
   const gI=p=>period==='mensual'?S.ingresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+x.monto,0):S.ingresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+x.monto,0);
   const gITBIS=p=>period==='mensual'?S.ingresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+(x.itbis||0),0):S.ingresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+(x.itbis||0),0);
   const gE=p=>period==='mensual'?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+x.monto,0):S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+x.monto,0);
+  // Costo Directo (produce el trabajo) vs Gasto Operativo (mantiene el taller abierto) — separa
+  // Margen Bruto de Margen Neto. Mismo filtro de fecha que gE, solo que además separa por tipo.
+  const gPorTipo=(p,tipo)=>period==='mensual'
+    ?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo).reduce((s,x)=>s+x.monto,0)
+    :S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo;}).reduce((s,x)=>s+x.monto,0);
   // "ing" = Ingresos Netos (SIN ITBIS) — el ITBIS cobrado nunca es ingreso real, es dinero
   // que le debes a la DGII. Usar el bruto (con ITBIS) aquí infla la utilidad artificialmente.
-  const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p);return{...p,ing:neto,itbis:itbisP,bruto,egr,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
+  const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p),costoDirecto=gPorTipo(p,'directo'),gastoOperativo=gPorTipo(p,'operativo'),utilBruta=neto-costoDirecto;return{...p,ing:neto,itbis:itbisP,bruto,egr,costoDirecto,gastoOperativo,utilBruta,margenBruto:neto>0?(utilBruta/neto*100):0,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
   const totIng=data.reduce((s,p)=>s+p.ing,0),totItbis=data.reduce((s,p)=>s+p.itbis,0),totBruto=data.reduce((s,p)=>s+p.bruto,0),totEgr=data.reduce((s,p)=>s+p.egr,0),totUtil=totIng-totEgr,totMarg=totIng>0?(totUtil/totIng*100):0;
+  const totCostoDirecto=data.reduce((s,p)=>s+p.costoDirecto,0),totGastoOperativo=data.reduce((s,p)=>s+p.gastoOperativo,0),totUtilBruta=totIng-totCostoDirecto,totMargBruto=totIng>0?(totUtilBruta/totIng*100):0;
   document.getElementById('rent-kpis').innerHTML=`
     <div class="bcard" style="border-color:rgba(129,140,248,.3);flex:1;min-width:130px;"><div class="bcard-label">Ingresos Netos ${desde?'desde '+fmtDate(desde):year} <span title="Sin ITBIS — antes de impuestos">ⓘ</span></div><div class="bcard-value positive">${fmt(totIng)}</div></div>
     <div class="bcard" style="border-color:rgba(250,255,1,.3);flex:1;min-width:130px;"><div class="bcard-label">ITBIS Cobrado ${desde?'desde '+fmtDate(desde):year}</div><div class="bcard-value" style="color:#fdc901;">${fmt(totItbis)}</div></div>
     <div class="bcard" style="border-color:rgba(129,140,248,.15);flex:1;min-width:130px;"><div class="bcard-label">Total Facturado (con ITBIS)</div><div class="bcard-value" style="color:#9ca3af;">${fmt(totBruto)}</div></div>
-    <div class="bcard" style="border-color:rgba(239,68,68,.3);flex:1;min-width:130px;"><div class="bcard-label">Egresos ${desde?'desde '+fmtDate(desde):year}</div><div class="bcard-value negative">${fmt(totEgr)}</div></div>
+    <div class="bcard" style="border-color:rgba(34,211,211,.3);flex:1;min-width:130px;"><div class="bcard-label">Costo Directo (Materiales, etc.) <span title="Lo que cuesta producir el trabajo en sí — materiales, subcontratación, impresión. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value" style="color:#22d3d3;">${fmt(totCostoDirecto)}</div></div>
+    <div class="bcard" style="border-color:${totUtilBruta>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Bruta <span title="Ingresos Netos − Costo Directo. Mide qué tan eficiente es tu producción, sin contar gastos fijos del taller.">ⓘ</span></div><div class="bcard-value ${totUtilBruta>=0?'positive':'negative'}">${fmt(totUtilBruta)}</div></div>
+    <div class="bcard" style="border-color:rgba(74,222,128,.3);flex:1;min-width:130px;"><div class="bcard-label">Margen Bruto</div><div class="bcard-value" style="color:${totMargBruto>=0?'#4ade80':'#ef4444'}">${totMargBruto.toFixed(1)}%</div></div>
+    <div class="bcard" style="border-color:rgba(239,68,68,.3);flex:1;min-width:130px;"><div class="bcard-label">Gastos Operativos <span title="Lo que cuesta mantener el taller abierto, sin importar cuánto factures — renta, nómina administrativa, servicios. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value negative">${fmt(totGastoOperativo)}</div></div>
     <div class="bcard" style="border-color:${totUtil>=0?'rgba(79,70,229,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Neta (Después de ITBIS)</div><div class="bcard-value ${totUtil>=0?'neutral':'negative'}">${fmt(totUtil)}</div></div>
     <div class="bcard" style="border-color:rgba(129,140,248,.3);flex:1;min-width:130px;"><div class="bcard-label">Margen Neto</div><div class="bcard-value" style="color:${totMarg>=0?'#818cf8':'#ef4444'}">${totMarg.toFixed(1)}%</div></div>`;
   wireAllPrivacyButtons();
@@ -8079,7 +8198,7 @@ function saveQuickBeneficiario(){
   const nuevo={
     id:Date.now(),nombre,
     rnc:document.getElementById('qb-rnc').value.trim(),
-    categoria:'otros',
+    categoria:'servicios',
     tel:document.getElementById('qb-tel').value.trim(),
     email:document.getElementById('qb-email').value.trim(),
     dir:''
@@ -8156,7 +8275,7 @@ const CXP_CAT_LABEL_TO_KEY={'materiales':'materiales','nómina':'nomina','alquil
   'luz_/_electricidad':'luz','internet':'internet','teléfono':'telefono',
   'combustible':'combustible','equipos':'equipos','subcontratación':'subcontratacion',
   'publicidad':'publicidad','impuestos':'impuestos','contabilidad':'contabilidad',
-  'transportación':'transporte','otros':'otros'};
+  'transportación':'transporte'};
 
 // Repara el ITBIS (y Total, si también quedó mal) de facturas viejas afectadas por un bug ya
 // corregido: el auto-cálculo de ITBIS/Total en Nueva Factura truncaba montos con coma de miles
@@ -8278,7 +8397,7 @@ function autoIngresoFromCxC(x,netAmount,date,method,bankIdx,esHistorico=false,mo
   const base = montoBruto!=null ? montoBruto : netAmount;
   const itbisFactura = parseFloat(x.itbis)||0;
   const itbisProrrateado = (x.amount>0 && itbisFactura>0) ? itbisFactura*(base/x.amount) : 0;
-  addIngreso(true,{fecha:date,clienteId:x.clientId||null,clienteNombre:x.client,categoria:x.categoria||'otros',monto:netAmount,itbis:itbisProrrateado,desc:`Fact. ${x.invoice}${x.desc?' – '+x.desc:''}`,metodo:method,ref,cuentaIdx:bankIdx,fuente:'cxc',fuenteId:fId,esHistorico,tipoVenta:x.tipoVenta||'corporativa'});save();
+  addIngreso(true,{fecha:date,clienteId:x.clientId||null,clienteNombre:x.client,categoria:x.categoria||'',monto:netAmount,itbis:itbisProrrateado,desc:`Fact. ${x.invoice}${x.desc?' – '+x.desc:''}`,metodo:method,ref,cuentaIdx:bankIdx,fuente:'cxc',fuenteId:fId,esHistorico,tipoVenta:x.tipoVenta||'corporativa'});save();
 }
 // Repara el ITBIS ya guardado en los Ingresos que se generaron automáticamente al cobrar una
 // factura de CxC — estos son los que realmente mueven el número "ITBIS Cobrado" en Rentabilidad.
@@ -8323,7 +8442,7 @@ function repararITBISIngresosGenerados(){
 function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref=''){
   const fId = pagoId!=null ? pagoId : item.id;
   if(S.egresos.find(e=>e.fuenteId===fId&&e.fuente==='cxp'))return;
-  const cat = section==='prestamos' ? 'prestamos' : (item.categoriaEgreso ? (CXP_CAT_LABEL_TO_KEY[item.categoriaEgreso]||'otros') : 'otros');
+  const cat = section==='prestamos' ? 'prestamos' : (item.categoriaEgreso ? (CXP_CAT_LABEL_TO_KEY[item.categoriaEgreso]||'') : '');
   addEgreso(true,{fecha:date,suplidorId:null,suplidorNombre:item.nombre,categoria:cat,monto:amount,
     desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,esHistorico});
   save();
@@ -8574,7 +8693,7 @@ const REP_CONFIGS={
   },
   cxp:{
     label:'Cuentas por Pagar',
-    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="proveedores">Proveedores</option><option value="serviciosFijos">Servicios Fijos</option><option value="prestamos">Préstamos</option><option value="otros">Otros</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Estado</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:160px;"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="vencida">Vencida</option><option value="pagada">Pagada</option></select></div>`,
+    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="proveedores">Proveedores</option><option value="serviciosFijos">Servicios Fijos</option><option value="prestamos">Préstamos</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Estado</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:160px;"><option value="">Todos</option><option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="vencida">Vencida</option><option value="pagada">Pagada</option></select></div>`,
     headers:['Nombre','Categoría','Concepto','Fecha','Vencimiento','Total','Abonado','Pendiente','Estado'],
     generate(d,h,f1,f2){
       const cats=f1?[f1]:['proveedores','serviciosFijos','prestamos','otros'];
@@ -8598,7 +8717,7 @@ const REP_CONFIGS={
   },
   ingresos:{
     label:'Ingresos',
-    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Cliente</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todos</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="offset">Impresión Offset</option><option value="rot_vehicular">Rotulación Vehicular</option><option value="senaletica">Señalética</option><option value="rotulos_gen">Rótulos Genéricos</option><option value="diseño">Diseño & Branding</option><option value="exterior">Publicidad Exterior</option><option value="rotulos3d">Rótulos 3D PVC</option><option value="cristales">Cristales y Murales</option><option value="acrilicas">Placas Acrílicas</option><option value="otros">Otros</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Tipo de Venta</div><select id="rep-f3" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:160px;"><option value="">Todos</option><option value="directa">🏪 Counter</option><option value="corporativa">🏢 Corporativa</option></select></div>`,
+    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Cliente</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todos</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="offset">Impresión Offset</option><option value="rot_vehicular">Rotulación Vehicular</option><option value="senaletica">Señalética</option><option value="rotulos_gen">Rótulos Genéricos</option><option value="diseño">Diseño & Branding</option><option value="exterior">Publicidad Exterior</option><option value="rotulos3d">Rótulos 3D PVC</option><option value="cristales">Cristales y Murales</option><option value="acrilicas">Placas Acrílicas</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Tipo de Venta</div><select id="rep-f3" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:160px;"><option value="">Todos</option><option value="directa">🏪 Counter</option><option value="corporativa">🏢 Corporativa</option></select></div>`,
     headers:['Fecha','Cliente','Categoría','Tipo Venta','Descripción','Método','Monto RD$'],
     generate(d,h,f1,f2,f3){
       let items=[...S.ingresos];
@@ -8614,7 +8733,7 @@ const REP_CONFIGS={
   },
   egresos:{
     label:'Egresos',
-    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="materiales">Materiales</option><option value="nomina">Nómina</option><option value="alquiler">Alquiler</option><option value="servicios">Servicios Básicos</option><option value="equipos">Equipos</option><option value="subcontratacion">Subcontratación</option><option value="publicidad">Publicidad</option><option value="impuestos">Impuestos</option><option value="transporte">Transportación</option><option value="otros">Otros</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Suplidor</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todos</option></select></div>`,
+    dynFilter:`<div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Categoría</div><select id="rep-f2" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todas</option><option value="materiales">Materiales</option><option value="nomina">Nómina Administrativa</option><option value="alquiler">Alquiler</option><option value="servicios">Servicios Básicos</option><option value="equipos">Equipos</option><option value="subcontratacion">Nómina de Producción</option><option value="publicidad">Publicidad</option><option value="impuestos">Impuestos</option><option value="transporte">Transportación</option></select></div><div><div style="font-size:15px;color:#8899bb;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px;">Suplidor</div><select id="rep-f1" style="background:var(--s2);border:1px solid var(--border2);border-radius:5px;color:#c8d0e0;font-family:var(--font);font-size:15px;padding:10px 14px;outline:none;min-width:180px;"><option value="">Todos</option></select></div>`,
     headers:['Fecha','Suplidor','Categoría','Descripción','Método','Monto RD$'],
     generate(d,h,f1,f2){
       let items=[...S.egresos];
@@ -8831,14 +8950,52 @@ function switchContab(section){
   document.querySelectorAll('#contabSubTabs .acct-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById(`contab-tab-${section}`).classList.add('active');
   document.getElementById('planCuentasView').style.display = section==='plan' ? '' : 'none';
+  document.getElementById('impuestosView').style.display = section==='impuestos' ? '' : 'none';
   document.getElementById('distribucionView').style.display = section==='distribucion' ? '' : 'none';
   document.getElementById('diarioView').style.display = section==='diario' ? '' : 'none';
   document.getElementById('mayorView').style.display = section==='mayor' ? '' : 'none';
   document.getElementById('seguridadView').style.display = section==='seguridad' ? '' : 'none';
   if(section==='plan') renderPlanCuentas();
+  if(section==='impuestos') renderResumenImpuestos();
   if(section==='distribucion') renderDistribuciones();
   if(section==='diario') renderLibroDiario();
   if(section==='mayor') renderLibroMayor();
+}
+// Resumen de Impuestos — ITBIS, ISR (anticipo mensual + anual) y TSS/INFOTEP, usando las
+// categorías reservadas que ya existían (nada duplicado). Cada bloque respeta su propia
+// periodicidad real en RD, en vez de asumir que todos los impuestos son mensuales.
+function renderResumenImpuestos(){
+  const sel=document.getElementById('imp-year');
+  const curYear=new Date().getFullYear();
+  if(!sel.options.length){
+    const anios=new Set([curYear]);
+    S.egresos.forEach(x=>anios.add(parseInt(x.fecha.slice(0,4))));
+    S.ingresos.forEach(x=>anios.add(parseInt(x.fecha.slice(0,4))));
+    [...anios].sort((a,b)=>b-a).forEach(y=>sel.innerHTML+=`<option value="${y}" ${y===curYear?'selected':''}>${y}</option>`);
+  }
+  const year=parseInt(sel.value||curYear);
+  const enElAnio=x=>x.fecha && x.fecha.startsWith(String(year));
+
+  const itbisCobrado = S.ingresos.filter(enElAnio).reduce((s,x)=>s+(x.itbis||0),0);
+  const itbisCredito = S.egresos.filter(x=>enElAnio(x)&&x.categoria!=='itbis').reduce((s,x)=>s+(x.itbis||0),0);
+  const itbisRemesas = S.egresos.filter(x=>enElAnio(x)&&x.categoria==='itbis').reduce((s,x)=>s+x.monto,0);
+  // "ITBIS por Pagar (saldo actual)" es el saldo ACUMULADO histórico (igual que Balance General),
+  // no solo del año filtrado — es lo que realmente le debes a la DGII hoy.
+  const itbisCobradoHist = S.ingresos.reduce((s,x)=>s+(x.itbis||0),0);
+  const itbisCreditoHist = S.egresos.filter(x=>x.categoria!=='itbis').reduce((s,x)=>s+(x.itbis||0),0);
+  const itbisRemesasHist = S.egresos.filter(x=>x.categoria==='itbis').reduce((s,x)=>s+x.monto,0);
+  const itbisPorPagar = Math.max(0, itbisCobradoHist - itbisCreditoHist - itbisRemesasHist);
+
+  const sumaCat = cat => S.egresos.filter(x=>enElAnio(x)&&x.categoria===cat).reduce((s,x)=>s+x.monto,0);
+
+  document.getElementById('imp-itbis-cobrado').textContent = fmt(itbisCobrado);
+  document.getElementById('imp-itbis-credito').textContent = fmt(itbisCredito);
+  document.getElementById('imp-itbis-remesas').textContent = fmt(itbisRemesas);
+  document.getElementById('imp-itbis-porpagar').textContent = fmt(itbisPorPagar);
+  document.getElementById('imp-isr-anticipos').textContent = fmt(sumaCat('anticipo_isr'));
+  document.getElementById('imp-isr-anual').textContent = fmt(sumaCat('isr_anual'));
+  document.getElementById('imp-tss').textContent = fmt(sumaCat('aporte_tss'));
+  document.getElementById('imp-infotep').textContent = fmt(sumaCat('aporte_infotep'));
 }
 function renderContabilidad(){
   seedDefaultCatAccountMap();
@@ -8888,6 +9045,17 @@ function renderPlanCuentas(){
     const opts=leafAccounts('gasto').map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${a.nombre}</option>`).join('');
     return `<tr><td>${c.label}</td><td><select onchange="setCuentaCodigo('tarjeta','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">${opts}</select></td></tr>`;
   }).join(''):`<tr><td colspan="2"><div class="empty-state">Sin categorías de tarjeta creadas todavía.</div></td></tr>`;
+
+  // Mapeo de Categorías de Egresos → Tipo de Costo (Directo vs Operativo)
+  document.getElementById('mapCostoDirectoBody').innerHTML=getAllEgrCats().map(c=>{
+    const tipo=getTipoCosto(c.key);
+    return `<tr><td>${c.label}</td><td>
+      <select onchange="S.categoriasCostoDirecto['${c.key}']=this.value;save();" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">
+        <option value="directo" ${tipo==='directo'?'selected':''}>💰 Costo Directo</option>
+        <option value="operativo" ${tipo==='operativo'?'selected':''}>🏢 Gasto Operativo</option>
+      </select>
+    </td></tr>`;
+  }).join('');
 }
 
 // ══════════════════ DISTRIBUCIÓN DE UTILIDADES (3030) ══════════════════
@@ -9535,6 +9703,8 @@ function ensureEstadoIntegro(){
   if(!S.egresos)    S.egresos=[];
   if(!S.categoriasIngresos) S.categoriasIngresos=[];
   if(!S.categoriasEgresos)  S.categoriasEgresos=[];
+  if(!S.categoriasCostoDirecto) S.categoriasCostoDirecto={};
+  if(!S.categoriasSuplidorTipo) S.categoriasSuplidorTipo=[];
   if(!S.categoriasTarjeta)  S.categoriasTarjeta=[];
   if(!S.catAccountMap) S.catAccountMap={ingresos:{},egresos:{},tarjeta:{}};
   if(!S.catAccountMap.ingresos) S.catAccountMap.ingresos={};
