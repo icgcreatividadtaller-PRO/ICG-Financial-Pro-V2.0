@@ -1592,6 +1592,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3>Historial de Egresos</h3>
       <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;" onclick="abrirRevisionDuplicados('egresos')">🔍 Revisar Posibles Duplicados</button>
+      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;margin-left:8px;" onclick="repararCategoriaEgresosPrestamos()">🔧 Reparar Categoría de Préstamos</button>
     </div>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
@@ -8463,6 +8464,28 @@ function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,
   addEgreso(true,{fecha:date,suplidorId:null,suplidorNombre:item.nombre,categoria:cat,monto:amount,
     desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,esHistorico});
   save();
+}
+// Reparación única: por un bug ya corregido en el código (los Egresos generados al pagar una
+// cuota de Préstamo no llevaban categoría), algunos quedaron guardados con la categoría vacía.
+// Esto los encuentra por su vínculo con el pago del préstamo y les asigna "Préstamos".
+function repararCategoriaEgresosPrestamos(){
+  const afectados=[];
+  S.egresos.forEach(e=>{
+    if(e.fuente!=='cxp' || e.categoria) return; // ya tiene categoría, o no viene de CxP
+    const item = S.cuentasPagar.prestamos.find(p=>p.id===e.fuenteId || (p.pagos||[]).some(pg=>pg.id===e.fuenteId));
+    if(item) afectados.push({e,item});
+  });
+  if(!afectados.length){
+    icgAlert('No se encontró ningún Egreso de préstamo con la categoría vacía. Todo está correcto.','Sin Egresos Afectados');
+    return;
+  }
+  const detalle = afectados.map(({e,item})=>`• ${fmtDate(e.fecha)} — ${esc(item.concepto||item.nombre)} — ${fmt(e.monto)}`).join('<br>');
+  icgConfirm(`Se encontraron <strong>${afectados.length}</strong> egreso(s) de pagos de préstamo sin categoría:<br><br>${detalle}<br><br>Se les asignará la categoría "Préstamos".`,'Reparar Categoría de Préstamos','Corregir Todos',false).then(ok=>{
+    if(!ok) return;
+    afectados.forEach(({e})=>{ e.categoria='prestamos'; });
+    save(); renderEgresos();
+    notify('success','Categoría Corregida',`${afectados.length} egreso(s) actualizados a "Préstamos".`);
+  });
 }
 
 // Limpieza única: si en algún momento se probó la versión con causación (devengado), pudieron
