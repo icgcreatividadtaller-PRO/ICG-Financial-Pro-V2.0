@@ -9546,6 +9546,11 @@ function icgAlert(msg, title='Aviso'){
 // Explicit CDP opener for date inputs inside modals (bypasses event propagation issues)
 function cdpOpen(input, e){
   if(e){e.preventDefault();e.stopPropagation();}
+  // Si hay un modal abierto y el campo de fecha que se clickeó NO está dentro de ese modal, es
+  // un campo de fondo (detrás del overlay) — no debería poder abrir el calendario en absoluto,
+  // ya que eso es justo lo que causa que aparezca flotando en una posición fuera de lugar.
+  const modalAbierto = document.querySelector('.modal-overlay.open');
+  if(modalAbierto && !modalAbierto.contains(input)) return;
   const cdpEl=document.getElementById('cdp');
   if(cdpEl&&cdpEl.classList.contains('open')&&window._cdpCurrentInput===input){
     cdpEl.classList.remove('open'); window._cdpCurrentInput=null; return;
@@ -9635,6 +9640,11 @@ function cdpOpen(input, e){
   document.addEventListener('click',function(e){
     const inp=e.target;
     if(inp.tagName==='INPUT'&&inp.type==='date'){
+      // Mismo resguardo: si hay un modal abierto, un campo de fecha que no está dentro de ese
+      // modal es un campo de fondo — no debe poder abrir el calendario (así se posiciona mal,
+      // flotando fuera de lugar, encima de lo que sí se está usando).
+      const modalAbierto = document.querySelector('.modal-overlay.open');
+      if(modalAbierto && !modalAbierto.contains(inp)) return;
       e.preventDefault(); e.stopPropagation();
       if(cdp().classList.contains('open')&&_cdpInput===inp){closeCDP();return;}
       openCDP(inp);
