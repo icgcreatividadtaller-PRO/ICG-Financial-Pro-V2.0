@@ -1925,6 +1925,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <div style="display:flex;gap:9px;flex-wrap:wrap;">
       <button class="btn btn-report" onclick="openReport('all','quincenal')">Reporte Quincenal</button>
       <button class="btn btn-report" onclick="openReport('all','mensual')">Reporte Mensual</button>
+      <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
     </div>
   </div>
   <div class="totals-bar" id="globalTotals"></div>
@@ -2713,6 +2714,7 @@ function defaultState() {
     categoriasEgresos:  [],
     categoriasCostoDirecto: {}, // overrides de Directo/Operativo por categoría — vacío = usa los valores por defecto
     categoriasSuplidorTipo: [],
+    categoriasIngresoFinanciero: [],
     catAccountMap: { ingresos:{}, egresos:{}, tarjeta:{} },
     distribuciones: [],
     securityPin: null,
@@ -2869,11 +2871,17 @@ function setTipoVenta(prefix, val){
   const hidden=document.getElementById(`${prefix}-tipoventa`); if(hidden) hidden.value=val;
   const dBtn=document.getElementById(`${prefix}-tv-directa`);
   const cBtn=document.getElementById(`${prefix}-tv-corp`);
+  const fBtn=document.getElementById(`${prefix}-tv-financiero`);
   const base='flex:1;height:44px;box-sizing:border-box;border-radius:7px;cursor:pointer;font-size:13px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:4px;';
   const activeCss=base+'border:2px solid #818cf8;background:rgba(129,140,248,.22);color:#818cf8;font-weight:700;';
+  const activeCssFin=base+'border:2px solid #4ade80;background:rgba(74,222,128,.18);color:#4ade80;font-weight:700;';
   const idleCss=base+'border:2px solid var(--border);background:var(--s2);color:#9ca3af;';
   if(dBtn){ dBtn.style.cssText = val==='directa' ? activeCss : idleCss; dBtn.classList.toggle('tv-btn-active', val==='directa'); }
   if(cBtn){ cBtn.style.cssText = val==='corporativa' ? activeCss : idleCss; cBtn.classList.toggle('tv-btn-active', val==='corporativa'); }
+  if(fBtn){ fBtn.style.cssText = val==='financiero' ? activeCssFin : idleCss; fBtn.classList.toggle('tv-btn-active', val==='financiero'); }
+  // Al elegir "Ingreso Financiero", la Categoría cambia a una lista específica (intereses,
+  // dividendos, etc.) — no tiene sentido mezclarla con las categorías de trabajos/ventas.
+  if(typeof onTipoVentaCategoriaSwitch==='function') onTipoVentaCategoriaSwitch(prefix, val);
 }
 function tipoVentaBadge(tv, clickSection, clickId){
   const clickable = clickSection && clickId!=null;
@@ -3404,7 +3412,15 @@ function addTx(i){
   continuarConMovimientoDeNegocio();
 }
 function _addTxConfirmed(i,date,type,method,amount,desc,ref=''){
-  pushTx(i,{id:Date.now(),date,type,method,amount,desc,ref});
+  // Si es una transferencia entre DOS cuentas propias, se marca explícitamente en ambos lados
+  // (esTransferenciaInterna) — necesario porque "transferencia" como método también se usa para
+  // pagos reales externos (un cliente pagándote, por ejemplo), así que no basta con el método
+  // solo para saber si es dinero nuevo o solo cambió de bolsillo entre tus propias cuentas.
+  const relSel=document.getElementById(`f-related-${i}`);
+  const relIdx=relSel?parseInt(relSel.value):NaN;
+  const esInterna = method==='transferencia' && !isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length && relIdx!==i;
+
+  pushTx(i,{id:Date.now(),date,type,method,amount,desc,ref,esTransferenciaInterna:esInterna});
 
   // Un Impuesto/Comisión Bancaria también debe contar como gasto real en el
   // Estado de Resultados y Reportes — no solo restar del saldo de la cuenta.
@@ -3415,29 +3431,24 @@ function _addTxConfirmed(i,date,type,method,amount,desc,ref=''){
 
   // ── Inter-account transfer: auto-post the matching side ──
   let transferMsg='';
-  if(method==='transferencia'){
-    const relSel=document.getElementById(`f-related-${i}`);
-    const relIdx=relSel?parseInt(relSel.value):NaN;
-    if(!isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length && relIdx!==i){
-      const otherType = type==='egreso' ? 'ingreso' : 'egreso';
-      const fromName = S.accounts[i].name;
-      const toName   = S.accounts[relIdx].name;
-      const linkDesc = type==='egreso'
-        ? `Transferencia recibida de ${fromName}${desc!=='(sin descripción)'?' – '+desc:''}`
-        : `Transferencia enviada a ${fromName}${desc!=='(sin descripción)'?' – '+desc:''}`;
-      pushTx(relIdx,{id:Date.now()+1,date,type:otherType,method:'transferencia',amount,desc:linkDesc,ref});
-      renderTx(relIdx);
-      transferMsg = type==='egreso'
-        ? ` → Acreditado en ${toName}`
-        : ` → Debitado de ${toName}`;
-    }
+  if(esInterna){
+    const otherType = type==='egreso' ? 'ingreso' : 'egreso';
+    const fromName = S.accounts[i].name;
+    const toName   = S.accounts[relIdx].name;
+    const linkDesc = type==='egreso'
+      ? `Transferencia recibida de ${fromName}${desc!=='(sin descripción)'?' – '+desc:''}`
+      : `Transferencia enviada a ${fromName}${desc!=='(sin descripción)'?' – '+desc:''}`;
+    pushTx(relIdx,{id:Date.now()+1,date,type:otherType,method:'transferencia',amount,desc:linkDesc,ref,esTransferenciaInterna:true});
+    renderTx(relIdx);
+    transferMsg = type==='egreso'
+      ? ` → Acreditado en ${toName}`
+      : ` → Debitado de ${toName}`;
   }
 
   save(); renderTx(i);
   document.getElementById(`f-amount-${i}`).value='';
   document.getElementById(`f-desc-${i}`).value='';
   document.getElementById(`f-ref-${i}`).value='';
-  const relSel=document.getElementById(`f-related-${i}`);
   if(relSel) relSel.value='';
   if(transferMsg){
     notify('success','Transferencia Registrada',`${fmt(amount)}${transferMsg}`);
@@ -5661,14 +5672,55 @@ function renderComparativo(){
 }
 
 
+// Reparación única: las transferencias entre cuentas propias registradas ANTES de este arreglo
+// no tenían la marca "esTransferenciaInterna" — se identifican por su patrón de descripción
+// (el lado auto-generado siempre dice "Transferencia recibida de X" / "Transferencia enviada a
+// X"), y desde ahí se busca su pareja (misma fecha, mismo monto, tipo opuesto, método
+// transferencia) en la cuenta correspondiente para marcar ambos lados.
+function repararTransferenciasInternas(){
+  const afectados=[];
+  const nombreAIdx = {}; S.accounts.forEach((a,i)=>{ nombreAIdx[a.name]=i; });
+
+  S.accounts.forEach((acc,i)=>{
+    acc.transactions.forEach(t=>{
+      if(t.esTransferenciaInterna || t.method!=='transferencia') return;
+      const m = (t.desc||'').match(/^Transferencia (?:recibida de|enviada a) (.+?)(?: – |$)/);
+      if(!m) return; // no es el lado auto-generado — no se puede identificar con certeza
+      const otroIdx = nombreAIdx[m[1]];
+      if(otroIdx===undefined || otroIdx===i) return;
+      afectados.push({acc,t});
+      // Busca la pareja: mismo monto y fecha, tipo opuesto, en la otra cuenta
+      const otroTipo = t.type==='ingreso' ? 'egreso' : 'ingreso';
+      const pareja = S.accounts[otroIdx].transactions.find(t2=>
+        !t2.esTransferenciaInterna && t2.method==='transferencia' && t2.type===otroTipo &&
+        t2.date===t.date && Math.abs(t2.amount-t.amount)<0.01 && !/^Transferencia (?:recibida de|enviada a) /.test(t2.desc||''));
+      if(pareja) afectados.push({acc:S.accounts[otroIdx],t:pareja});
+    });
+  });
+
+  if(!afectados.length){
+    icgAlert('No se encontró ninguna transferencia interna sin marcar. Todo está correcto.','Sin Transferencias Afectadas');
+    return;
+  }
+  const detalle = afectados.map(({acc,t})=>`• ${fmtDate(t.date)} — ${esc(acc.name)} — ${t.type==='ingreso'?'+':'−'}${fmt(t.amount)} — ${esc(t.desc)}`).join('<br>');
+  icgConfirm(`Se encontraron <strong>${afectados.length}</strong> movimiento(s) de transferencias internas sin marcar:<br><br>${detalle}<br><br>Se marcarán como transferencia interna, para que dejen de contarse como Ingresos/Egresos reales en Consolidado.`,'Reparar Transferencias Internas','Corregir Todos',false).then(ok=>{
+    if(!ok) return;
+    afectados.forEach(({t})=>{ t.esTransferenciaInterna=true; });
+    save(); renderConsolidated();
+    notify('success','Transferencias Corregidas',`${afectados.length} movimiento(s) actualizados.`);
+  });
+}
 function renderConsolidated(){
   const gt=document.getElementById('globalTotals');
   const grid=document.getElementById('consolidatedGrid');
   let gInit=0,gInc=0,gExp=0;
   S.accounts.forEach(acc=>{
     gInit+=acc.initialBalance||0;
-    gInc+=acc.transactions.filter(t=>t.type==='ingreso').reduce((s,t)=>s+t.amount,0);
-    gExp+=acc.transactions.filter(t=>(t.type==='egreso'||t.type==='impuesto')).reduce((s,t)=>s+t.amount,0);
+    // Las transferencias entre tus propias cuentas no son dinero nuevo — se excluyen de estos
+    // totales (el saldo consolidado sigue siendo correcto de todas formas, porque se cancelan
+    // solas entre el lado que sale y el que entra).
+    gInc+=acc.transactions.filter(t=>t.type==='ingreso'&&!t.esTransferenciaInterna).reduce((s,t)=>s+t.amount,0);
+    gExp+=acc.transactions.filter(t=>(t.type==='egreso'||t.type==='impuesto')&&!t.esTransferenciaInterna).reduce((s,t)=>s+t.amount,0);
   });
   const gBal=gInit+gInc-gExp;
 
@@ -6043,6 +6095,15 @@ function renderSuplidores(){
 
 // ══════════════════ INGRESOS ══════════════════
 const ING_CAT_LABELS={offset:'Impresión Offset',rot_vehicular:'Rotulación Vehicular',senaletica:'Señalética',rotulos_gen:'Rótulos Genéricos',diseño:'Diseño & Branding',exterior:'Publicidad Exterior',rotulos3d:'Rótulos 3D PVC',cristales:'Rotulación Cristales y Murales',acrilicas:'Placas Acrílicas'};
+// Ingreso Financiero (intereses, dividendos, etc.) — NO es una venta, así que usa su propia lista
+// de categorías, separada de ING_CAT_LABELS, y se excluye del Margen Bruto/Neto en Rentabilidad
+// (no tiene costo directo asociado, no es parte de la operación real del taller).
+const ING_FIN_CAT_LABELS={intereses_bancarios:'Intereses Bancarios Percibidos',dividendos:'Dividendos',reembolsos:'Reembolsos / Devoluciones'};
+function getAllIngFinCats(){
+  const custom=(S.categoriasIngresoFinanciero||[]).map(c=>({key:c.key,label:c.label}));
+  const builtin=Object.entries(ING_FIN_CAT_LABELS).map(([k,v])=>({key:k,label:v}));
+  return [...builtin,...custom].sort((a,b)=>a.label.localeCompare(b.label,'es'));
+}
 const EGR_CAT_LABELS={materiales:'Materiales',nomina:'Nómina Administrativa',alquiler:'Alquiler',luz:'Electricidad',internet:'Internet',telefono:'Teléfono',combustible:'Combustible',equipos:'Equipos',subcontratacion:'Nómina de Producción',publicidad:'Publicidad',impuestos:'Impuestos',contabilidad:'Contabilidad',transporte:'Transportación',impresion_offset:'Impresión Offset',impresion_gran_formato:'Gran Formato',impresion_digital:'Impresión Digital',rotulacion_egr:'Rotulación',instalacion:'Instalación'};
 // Costo Directo (lo que cuesta producir el trabajo en sí) vs Gasto Operativo (lo que cuesta
 // mantener el taller abierto, sin importar cuánto factures) — separa Margen Bruto de Margen
