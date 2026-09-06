@@ -696,6 +696,21 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 
 <!-- ══ CAMBIAR CATEGORÍA (factura de CxC ya pagada) — no toca el pago ni el dinero ══ -->
 <!-- ══ NOTIFICACIÓN (reemplaza los avisos flotantes que desaparecían solos) ══ -->
+<!-- ══ GESTIONAR CATEGORÍAS (agregar y quitar) ══ -->
+<div class="modal-overlay" id="gestionarCatModal">
+  <div class="modal" style="max-width:440px;border-color:rgba(129,140,248,.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 id="gestionarCatTitulo" style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">Gestionar Categorías</h2>
+      <button class="modal-close" onclick="closeGestionarCategorias()">✕</button>
+    </div>
+    <div id="gestionarCatLista" style="max-height:320px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;">
+      <input autocomplete="off" type="text" id="gestionarCat-nueva" placeholder="Nombre de la nueva categoría..." style="flex:1;height:44px;box-sizing:border-box;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:0 12px;" onkeydown="if(event.key==='Enter')confirmarNuevaCategoria()">
+      <button class="btn btn-primary" style="white-space:nowrap;" onclick="confirmarNuevaCategoria()">+ Agregar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="notifyModal">
   <div class="modal notify-box" style="max-width:420px;border-width:2px;text-align:center;">
     <div class="notify-icon" style="font-size:40px;margin-bottom:12px;">◎</div>
@@ -1319,7 +1334,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="cristales">Rotulación Cristales y Murales</option>
             <option value="acrilicas">Placas Acrílicas</option>
           </select>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomCategory('ing')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('ing')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Gestionar categorías">✎</button>
         </div>
       </div>
       <div class="form-group" style="width:150px;flex-shrink:0;">
@@ -1363,10 +1378,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <p style="font-size:15px;color:#6b7a99;margin-top:8px;">Los ingresos de CxC pagadas se registran automáticamente aquí.</p>
   </div>
   <div class="transactions-section">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3>Historial de Ingresos</h3>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;" onclick="abrirRevisionDuplicados('ingresos')">🔍 Revisar Posibles Duplicados</button>
-    </div>
+    <h3>Historial de Ingresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
         <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="renderIngresos()" placeholder="Cliente, categoría o descripción..." style="width:100%;box-sizing:border-box;">
@@ -1532,7 +1544,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="rotulacion_egr">Rotulación</option>
             <option value="instalacion">Instalación</option>
           </select>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="addCustomCategory('egr')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#ef4444;border-color:rgba(239,68,68,.3);font-size:18px;box-sizing:border-box;" title="Nueva categoría">+</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#ef4444;border-color:rgba(239,68,68,.3);font-size:18px;box-sizing:border-box;" title="Gestionar categorías">✎</button>
         </div>
       </div>
       <div class="form-group" style="width:150px;flex-shrink:0;">
@@ -2715,6 +2727,8 @@ function defaultState() {
     categoriasCostoDirecto: {}, // overrides de Directo/Operativo por categoría — vacío = usa los valores por defecto
     categoriasSuplidorTipo: [],
     categoriasIngresoFinanciero: [],
+    categoriasIngresoOcultas: [],
+    categoriasEgresoOcultas: [],
     catAccountMap: { ingresos:{}, egresos:{}, tarjeta:{} },
     distribuciones: [],
     securityPin: null,
@@ -5268,9 +5282,23 @@ function renderBalanceGeneral(){
     </div>`;
 
   const cuadra = Math.abs(diferencia) < 0.01;
+  let msgDiferencia = `revisa los montos manuales (Activos Fijos), movimientos marcados como "Histórico", o ajustes de "Corte de Balance".`;
+  // Antes de caer en el mensaje genérico, se revisa si la diferencia coincide con algo real y
+  // esperable: CxC pendiente de cobro (sube Activos sin subir Capital todavía, hasta que se
+  // cobre) o CxP pendiente de pago (sube Pasivos sin bajar nada más, hasta que se pague). Esto
+  // es normal mientras existan facturas/cuentas sin liquidar — no es un error que corregir.
+  if(!cuadra){
+    if(Math.abs(diferencia - cxcPendiente) < 1){
+      msgDiferencia = `esto coincide con tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) — es normal y temporal: el sistema reconoce el Ingreso real solo cuando cobras, no cuando facturas. Se corrige solo en cuanto cobres esas facturas.`;
+    } else if(Math.abs(diferencia + cxpTotal) < 1){
+      msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
+    } else if(Math.abs(diferencia - (cxcPendiente - cxpTotal)) < 1){
+      msgDiferencia = `esto coincide con la combinación de tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) y tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — ambas son normales y temporales, se corrigen solas en cuanto cobres/pagues esas cuentas.`;
+    }
+  }
   document.getElementById('bg-cuadre').innerHTML = cuadra
     ? `<div style="border:2px solid rgba(74,222,128,.4);border-radius:12px;padding:16px;text-align:center;color:#4ade80;font-weight:600;">✅ El Balance cuadra — Activos = Pasivos + Capital</div>`
-    : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — revisa los montos manuales (Activos Fijos), movimientos marcados como "Histórico", o ajustes de "Corte de Balance".</div>`;
+    : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>`;
 
   // Índice de Solvencia = Activos Totales ÷ Pasivos Totales — >1 significa que tienes más de lo
   // que debes (bien); <1 significa que debes más de lo que tienes (alerta).
@@ -6104,6 +6132,86 @@ function getAllIngFinCats(){
   const builtin=Object.entries(ING_FIN_CAT_LABELS).map(([k,v])=>({key:k,label:v}));
   return [...builtin,...custom].sort((a,b)=>a.label.localeCompare(b.label,'es'));
 }
+// ══════════════════ GESTIONAR CATEGORÍAS (agregar y quitar) ══════════════════
+// A diferencia del viejo botón "+" (solo agregaba), esto muestra la lista completa — categorías
+// base y personalizadas — con opción de quitar cualquiera. Las base no se pueden borrar del
+// código en sí, así que se "ocultan" (se guardan en S.categoriasXOcultas) — si algún día se
+// necesitan de vuelta, se pueden volver a mostrar de la misma forma.
+let _gestionarCatTipo=null;
+function openGestionarCategorias(tipo){
+  _gestionarCatTipo=tipo;
+  const titulos={ing:'Categorías de Ingresos',egr:'Categorías de Egresos'};
+  document.getElementById('gestionarCatTitulo').textContent=titulos[tipo]||'Gestionar Categorías';
+  document.getElementById('gestionarCat-nueva').value='';
+  renderGestionarCategoriasLista();
+  document.getElementById('gestionarCatModal').classList.add('open');
+}
+function closeGestionarCategorias(){
+  document.getElementById('gestionarCatModal').classList.remove('open');
+}
+function renderGestionarCategoriasLista(){
+  const tipo=_gestionarCatTipo;
+  const ocultasKey = tipo==='ing' ? 'categoriasIngresoOcultas' : 'categoriasEgresoOcultas';
+  if(!S[ocultasKey]) S[ocultasKey]=[];
+  const builtinLabels = tipo==='ing' ? ING_CAT_LABELS : EGR_CAT_LABELS;
+  const customList = tipo==='ing' ? (S.categoriasIngresos||[]) : (S.categoriasEgresos||[]);
+  const registros = tipo==='ing' ? S.ingresos : S.egresos;
+  const reservadas = tipo==='egr' ? Object.keys(CUENTAS_FIJAS||{}) : [];
+
+  const items = [
+    ...Object.entries(builtinLabels).filter(([k])=>!S[ocultasKey].includes(k)).map(([key,label])=>({key,label,esBase:true})),
+    ...customList.map(c=>({key:c.key,label:c.label,esBase:false}))
+  ].sort((a,b)=>a.label.localeCompare(b.label,'es'));
+
+  document.getElementById('gestionarCatLista').innerHTML = items.length ? items.map(c=>{
+    const enUso = registros.filter(r=>r.categoria===c.key).length;
+    const esFija = reservadas.includes(c.key);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-bottom:1px solid var(--border2);">
+      <span style="font-size:15px;color:#c0c6d8;">${esc(c.label)}${enUso?` <span style="color:#6b7a99;font-size:13px;">(${enUso} registro${enUso===1?'':'s'})</span>`:''}${esFija?' <span style="color:#818cf8;font-size:13px;">(fija)</span>':''}</span>
+      ${esFija?'':`<button class="del-btn" onclick="quitarCategoria('${c.key}',${c.esBase})" title="Quitar">×</button>`}
+    </div>`;
+  }).join('') : '<div class="empty-state">Sin categorías.</div>';
+}
+function quitarCategoria(key,esBase){
+  const tipo=_gestionarCatTipo;
+  const registros = tipo==='ing' ? S.ingresos : S.egresos;
+  const enUso = registros.filter(r=>r.categoria===key).length;
+  const seguir = async()=>{
+    if(esBase){
+      const ocultasKey = tipo==='ing' ? 'categoriasIngresoOcultas' : 'categoriasEgresoOcultas';
+      if(!S[ocultasKey]) S[ocultasKey]=[];
+      S[ocultasKey].push(key);
+    } else {
+      const listKey = tipo==='ing' ? 'categoriasIngresos' : 'categoriasEgresos';
+      S[listKey] = (S[listKey]||[]).filter(c=>c.key!==key);
+    }
+    save();
+    renderGestionarCategoriasLista();
+    if(tipo==='ing') refreshIngresoSelects(); else refreshEgresoSelects();
+  };
+  if(enUso>0){
+    icgConfirm(`Esta categoría está usada en <strong>${enUso}</strong> registro(s) ya guardados. Si la quitas, esos registros van a mostrar "Sin categoría" — no se borra ningún dato, solo la etiqueta deja de estar disponible para elegir en el futuro.<br><br>¿Continuar?`,'Categoría en Uso','Quitar de Todas Formas',true).then(ok=>{ if(ok) seguir(); });
+  } else {
+    seguir();
+  }
+}
+function confirmarNuevaCategoria(){
+  const tipo=_gestionarCatTipo;
+  const input=document.getElementById('gestionarCat-nueva');
+  const label=input.value.trim();
+  if(!label) return;
+  const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  const listKey = tipo==='ing' ? 'categoriasIngresos' : 'categoriasEgresos';
+  if(!S[listKey]) S[listKey]=[];
+  if(S[listKey].some(c=>c.key===key) || (tipo==='ing'?ING_CAT_LABELS:EGR_CAT_LABELS)[key]){
+    notify('info','Ya existe','Esa categoría ya está en la lista.'); return;
+  }
+  S[listKey].push({key,label});
+  save();
+  input.value='';
+  renderGestionarCategoriasLista();
+  if(tipo==='ing') refreshIngresoSelects(); else refreshEgresoSelects();
+}
 const EGR_CAT_LABELS={materiales:'Materiales',nomina:'Nómina Administrativa',alquiler:'Alquiler',luz:'Electricidad',internet:'Internet',telefono:'Teléfono',combustible:'Combustible',equipos:'Equipos',subcontratacion:'Nómina de Producción',publicidad:'Publicidad',impuestos:'Impuestos',contabilidad:'Contabilidad',transporte:'Transportación',impresion_offset:'Impresión Offset',impresion_gran_formato:'Gran Formato',impresion_digital:'Impresión Digital',rotulacion_egr:'Rotulación',instalacion:'Instalación'};
 // Costo Directo (lo que cuesta producir el trabajo en sí) vs Gasto Operativo (lo que cuesta
 // mantener el taller abierto, sin importar cuánto factures) — separa Margen Bruto de Margen
@@ -6188,12 +6296,14 @@ function setCuentaCodigo(tipo,key,code){
 // ── Dynamic category helpers ──
 function getAllIngCats(){
   const custom=(S.categoriasIngresos||[]).map(c=>({key:c.key,label:c.label}));
-  const builtin=Object.entries(ING_CAT_LABELS).map(([k,v])=>({key:k,label:v}));
+  const ocultas=S.categoriasIngresoOcultas||[];
+  const builtin=Object.entries(ING_CAT_LABELS).filter(([k])=>!ocultas.includes(k)).map(([k,v])=>({key:k,label:v}));
   return [...builtin,...custom].sort((a,b)=>a.label.localeCompare(b.label,'es'));
 }
 function getAllEgrCats(){
   const custom=(S.categoriasEgresos||[]).map(c=>({key:c.key,label:c.label}));
-  const builtin=Object.entries(EGR_CAT_LABELS).map(([k,v])=>({key:k,label:v}));
+  const ocultas=S.categoriasEgresoOcultas||[];
+  const builtin=Object.entries(EGR_CAT_LABELS).filter(([k])=>!ocultas.includes(k)).map(([k,v])=>({key:k,label:v}));
   return [...builtin,...custom].sort((a,b)=>a.label.localeCompare(b.label,'es'));
 }
 // Para los desplegables donde se ELIGE una categoría nueva, "Otros" se excluye a propósito
@@ -7777,7 +7887,7 @@ function renderIngresos(){
     const ingDesc = x.fuente==='cxc' 
       ? x.desc||'—'
       : (x.desc ? x.desc.replace(/^Ingreso:\s*[^–]*–\s*/,'').trim()||x.desc : '—');
-    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.clienteNombre)||'—'}</td><td><span class="badge" style="background:rgba(129,140,248,.12);color:#818cf8;">${esc(ingCatLabel)}</span></td><td style="max-width:180px;">${esc(ingDesc)}</td><td>${tipoVentaBadge(x.tipoVenta,'ingreso',x.id)}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono positive" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxc'?'badge-transfer':'badge-dep'}">${x.fuente==='cxc'?'CxC':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" title="${x.ref?'Ref: '+esc(x.ref):'Agregar Referencia'}" onclick="openEditRef('ingreso',${x.id},'${escAttr(x.ref)}')">✏️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delIngreso(${x.id})">×</button>`:''}</td></tr>`;
+    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.clienteNombre)||'—'}</td><td><span class="badge" style="background:rgba(129,140,248,.12);color:#818cf8;">${esc(ingCatLabel)}</span></td><td style="max-width:180px;">${esc(ingDesc)}</td><td>${tipoVentaBadge(x.tipoVenta,'ingreso',x.id)}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono positive" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxc'?'badge-transfer':'badge-dep'}">${x.fuente==='cxc'?'CxC':'Manual'}</span></td><td style="white-space:nowrap;">${x.fuente==='manual'?`<button class="del-btn" onclick="delIngreso(${x.id})">×</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="11"><div class="empty-state">Sin ingresos que coincidan con la búsqueda.</div></td></tr>`;
 }
 
@@ -8088,7 +8198,7 @@ function renderEgresos(){
     const egrCatLabel = ({...EGR_CAT_LABELS,cxp:'Pago CxP',...Object.fromEntries((S.categoriasEgresos||[]).map(c=>[c.key,c.label]))})[x.categoria]||x.categoria||'—';
     const egrDesc = x.desc ? x.desc.replace(/^Egreso:\s*[^–]*–\s*/,'').trim()||x.desc : '—';
     const egrDescConFactura = x.numFactura ? `<strong style="color:#8899bb;">Fact. ${esc(x.numFactura)}</strong>${egrDesc!=='—'?' – '+esc(egrDesc):''}` : esc(egrDesc);
-    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(egrCatLabel)}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button><button class="del-btn" title="${x.ref?'Ref: '+esc(x.ref):'Agregar Referencia'}" onclick="openEditRef('egreso',${x.id},'${escAttr(x.ref)}')">✏️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
+    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(egrCatLabel)}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="10"><div class="empty-state">Sin egresos que coincidan con la búsqueda.</div></td></tr>`;
 }
 
@@ -9817,6 +9927,8 @@ function ensureEstadoIntegro(){
   if(!S.categoriasCostoDirecto) S.categoriasCostoDirecto={};
   if(!S.categoriasSuplidorTipo) S.categoriasSuplidorTipo=[];
   if(!S.categoriasTarjeta)  S.categoriasTarjeta=[];
+  if(!S.categoriasIngresoOcultas) S.categoriasIngresoOcultas=[];
+  if(!S.categoriasEgresoOcultas) S.categoriasEgresoOcultas=[];
   if(!S.catAccountMap) S.catAccountMap={ingresos:{},egresos:{},tarjeta:{}};
   if(!S.catAccountMap.ingresos) S.catAccountMap.ingresos={};
   if(!S.catAccountMap.egresos)  S.catAccountMap.egresos={};
