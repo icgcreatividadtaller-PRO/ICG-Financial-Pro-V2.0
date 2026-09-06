@@ -5282,11 +5282,12 @@ function renderBalanceGeneral(){
     </div>`;
 
   const cuadra = Math.abs(diferencia) < 0.01;
-  let msgDiferencia = `revisa los montos manuales (Activos Fijos), movimientos marcados como "Histórico", o ajustes de "Corte de Balance".`;
-  // Antes de caer en el mensaje genérico, se revisa si la diferencia coincide con algo real y
-  // esperable: CxC pendiente de cobro (sube Activos sin subir Capital todavía, hasta que se
-  // cobre) o CxP pendiente de pago (sube Pasivos sin bajar nada más, hasta que se pague). Esto
-  // es normal mientras existan facturas/cuentas sin liquidar — no es un error que corregir.
+  // Antes de decir cualquier cosa, se revisa qué causas REALMENTE aplican a tus datos — nunca se
+  // menciona "Histórico" o "Corte de Balance" si no los has usado, para no mandarte a revisar
+  // algo que ni siquiera existe en tu sistema.
+  const hayHistoricos = S.ingresos.some(x=>x.esHistorico) || S.egresos.some(x=>x.esHistorico);
+  const hayCorteBalance = ajustesDeCorte !== 0;
+  let msgDiferencia = '';
   if(!cuadra){
     if(Math.abs(diferencia - cxcPendiente) < 1){
       msgDiferencia = `esto coincide con tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) — es normal y temporal: el sistema reconoce el Ingreso real solo cuando cobras, no cuando facturas. Se corrige solo en cuanto cobres esas facturas.`;
@@ -5294,6 +5295,14 @@ function renderBalanceGeneral(){
       msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
     } else if(Math.abs(diferencia - (cxcPendiente - cxpTotal)) < 1){
       msgDiferencia = `esto coincide con la combinación de tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) y tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — ambas son normales y temporales, se corrigen solas en cuanto cobres/pagues esas cuentas.`;
+    } else {
+      // No coincidió con ninguna causa conocida y esperable — se arma la lista SOLO con lo que
+      // de verdad existe en tus datos, en vez de una lista genérica fija.
+      const posibles = [];
+      if(hayCorteBalance) posibles.push('los ajustes de "Corte de Balance" que sí tienes registrados');
+      if(hayHistoricos) posibles.push('movimientos marcados como "Histórico" que sí tienes registrados');
+      posibles.push('los montos de Activos Fijos (verifica que estén escritos correctamente)');
+      msgDiferencia = `no coincide con ninguna causa esperable automática (CxC/CxP pendientes) — revisa ${posibles.join(', ')}. Si no encuentras la causa, dime qué registraste justo antes de ver este mensaje y lo rastreamos juntos.`;
     }
   }
   document.getElementById('bg-cuadre').innerHTML = cuadra
