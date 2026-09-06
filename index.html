@@ -1513,14 +1513,14 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Fecha</label>
         <input autocomplete="off" type="date" id="egr-fecha" onclick="cdpOpen(this,event)" style="height:44px;box-sizing:border-box;">
       </div>
-      <div class="form-group" style="flex:2;min-width:260px;">
+      <div class="form-group" style="flex:1.2;min-width:190px;">
         <label>Beneficiario</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="egr-suplidor" style="flex:1;min-width:0;height:44px;box-sizing:border-box;"><option value="">— Seleccionar suplidor —</option></select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="openQuickBeneficiario()" style="height:44px;padding:0 12px;white-space:nowrap;border-color:rgba(129,140,248,.3);color:#818cf8;flex-shrink:0;box-sizing:border-box;">+ Nuevo</button>
         </div>
       </div>
-      <div class="form-group" style="width:200px;flex-shrink:0;">
+      <div class="form-group" style="width:190px;flex-shrink:0;">
         <label>Categoría</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="egr-categoria" style="flex:1;height:44px;box-sizing:border-box;">
@@ -1547,13 +1547,17 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
           <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#ef4444;border-color:rgba(239,68,68,.3);font-size:18px;box-sizing:border-box;" title="Gestionar categorías">✎</button>
         </div>
       </div>
-      <div class="form-group" style="width:150px;flex-shrink:0;">
-        <label>Monto (RD$)</label>
-        <input autocomplete="off" type="text" inputmode="decimal" id="egr-monto" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this)">
+      <div class="form-group" style="width:135px;flex-shrink:0;">
+        <label>Subtotal (RD$)</label>
+        <input autocomplete="off" type="text" inputmode="decimal" id="egr-subtotal" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(false);">
       </div>
-      <div class="form-group" style="width:150px;flex-shrink:0;">
-        <label>ITBIS (RD$) <span style="font-weight:400;color:#6b7a99;">opcional</span></label>
-        <input autocomplete="off" type="text" inputmode="decimal" id="egr-itbis" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this)" title="Si esta compra incluye ITBIS, escríbelo aquí — se resta de lo que le debes a la DGII (crédito fiscal).">
+      <div class="form-group" style="width:135px;flex-shrink:0;">
+        <label>ITBIS (RD$) <span style="font-weight:400;color:#6b7a99;">18%</span></label>
+        <input autocomplete="off" type="text" inputmode="decimal" id="egr-itbis" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(true);" title="Se calcula solo al 18% del Subtotal — puedes ajustarlo a mano si tu compra trae un monto distinto.">
+      </div>
+      <div class="form-group" style="width:145px;flex-shrink:0;">
+        <label>Total (RD$)</label>
+        <input autocomplete="off" type="text" inputmode="decimal" id="egr-monto" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;font-weight:700;" oninput="formatMontoInput(this)">
       </div>
     </div>
     <!-- Row 2: Descripción · N° Factura · Método · Cuenta/Nota -->
@@ -3859,6 +3863,20 @@ function calcDue(){
 }
 
 // Subtotal → ITBIS (18%, editable a mano) → Total (siempre automático, no editable)
+// Mismo patrón que calcCxCTotales, aplicado a Registrar Egreso: Subtotal → ITBIS (18%,
+// ajustable a mano) → Total (Subtotal+ITBIS, también ajustable si el gasto real no calza exacto).
+function calcEgresoTotales(itbisEditadoAMano){
+  const subEl=document.getElementById('egr-subtotal');
+  const itbisEl=document.getElementById('egr-itbis');
+  const totalEl=document.getElementById('egr-monto');
+  const sub=numVal(subEl)||0;
+  if(!itbisEditadoAMano){
+    if(sub>0) setMontoValue(itbisEl,sub*0.18); else itbisEl.value='';
+  }
+  const itbis=numVal(itbisEl)||0;
+  const total = sub+itbis;
+  if(total>0) setMontoValue(totalEl,total); else totalEl.value='';
+}
 function calcCxCTotales(itbisEditadoAMano){
   const subEl=document.getElementById('cxc-subtotal');
   const itbisEl=document.getElementById('cxc-itbis');
@@ -7958,6 +7976,7 @@ function addEgreso(auto=false,data={}){
   const cat=auto?data.categoria:document.getElementById('egr-categoria').value;
   const monto=auto?data.monto:numVal('egr-monto')||0;
   const itbis=auto?(data.itbis||0):(numVal('egr-itbis')||0);
+  const subtotal=auto?(data.subtotal||0):(numVal('egr-subtotal')||0);
   const desc=auto?data.desc:document.getElementById('egr-desc').value.trim();
   const numFactura=auto?(data.numFactura||''):document.getElementById('egr-numfactura').value.trim();
   const metodo=auto?data.metodo:document.getElementById('egr-metodo').value;
@@ -7972,7 +7991,7 @@ function addEgreso(auto=false,data={}){
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
     const egresoId=Date.now()+Math.random();
-    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,monto,itbis,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null});
+    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null});
     S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(esHistorico){
@@ -7996,6 +8015,7 @@ function addEgreso(auto=false,data={}){
         cc.transactions.sort((a,b)=>a.date.localeCompare(b.date));
       }
       save();renderEgresos();
+      document.getElementById('egr-subtotal').value='';
       document.getElementById('egr-monto').value='';
       document.getElementById('egr-itbis').value='';
       document.getElementById('egr-desc').value='';
