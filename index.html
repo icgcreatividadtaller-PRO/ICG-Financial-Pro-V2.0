@@ -5203,7 +5203,14 @@ function renderBalanceGeneral(){
   const cxcPendiente = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).reduce((s,x)=>s+cxcPending(x),0);
   const inventario = 0; // no se lleva inventario formal — confirmado con el usuario
   const totalActivosFijos = S.activosFijos.reduce((s,x)=>s+x.monto,0);
-  const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos;
+  // Dinero marcado como "Histórico" (no toca ninguna cuenta bancaria a propósito) sí sube el
+  // Capital vía Utilidades Retenidas — sin este Activo, ese dinero quedaría "flotando" sin
+  // ninguna contraparte, descuadrando el Balance para siempre (nunca se resuelve solo, a
+  // diferencia de CxC/CxP pendientes). Este Activo representa ese efectivo/valor no bancarizado.
+  const historicoIngresosNeto = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const historicoEgresosNeto = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const efectivoNoBancarizado = historicoIngresosNeto - historicoEgresosNeto;
+  const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos + efectivoNoBancarizado;
 
   // ── PASIVOS ──
   let cxpTotal=0;
@@ -5263,6 +5270,7 @@ function renderBalanceGeneral(){
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1020 Cuentas por Cobrar</span><span class="td-mono">${fmt(cxcPendiente)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1030 Inventario/Materiales</span><span class="td-mono">${fmt(inventario)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1040 Maquinaria y Equipo</span><span class="td-mono">${fmt(totalActivosFijos)}</span></div>
+      ${efectivoNoBancarizado!==0?`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1050 Efectivo No Bancarizado <span title="Dinero registrado como 'Histórico' — no pasa por ninguna cuenta bancaria del sistema, pero sí sube tu Capital, así que necesita este Activo para que el Balance cuadre." style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(efectivoNoBancarizado)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#4ade80;"><span>TOTAL ACTIVOS</span><span class="td-mono">${fmt(totalActivos)}</span></div>
     </div>
     <div class="add-form" style="margin-bottom:0;">
