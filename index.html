@@ -1551,9 +1551,12 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Subtotal (RD$)</label>
         <input autocomplete="off" type="text" inputmode="decimal" id="egr-subtotal" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(false);">
       </div>
-      <div class="form-group" style="width:135px;flex-shrink:0;">
-        <label>ITBIS (RD$) <span style="font-weight:400;color:#6b7a99;">18%</span></label>
-        <input autocomplete="off" type="text" inputmode="decimal" id="egr-itbis" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(true);" title="Se calcula solo al 18% del Subtotal — puedes ajustarlo a mano si tu compra trae un monto distinto.">
+      <div class="form-group" style="width:150px;flex-shrink:0;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="egr-tiene-itbis" onchange="toggleEgrItbis()" style="width:auto;cursor:pointer;">
+          ITBIS (RD$) <span style="font-weight:400;color:#6b7a99;">18%</span>
+        </label>
+        <input autocomplete="off" type="text" inputmode="decimal" id="egr-itbis" placeholder="0.00" min="0" step="0.01" disabled style="height:44px;box-sizing:border-box;opacity:.4;" oninput="formatMontoInput(this);calcEgresoTotales(true);" title="Marca la casilla si esta compra incluye ITBIS — se calcula solo al 18% del Subtotal, ajustable a mano si tu compra trae un monto distinto.">
       </div>
       <div class="form-group" style="width:145px;flex-shrink:0;">
         <label>Total (RD$)</label>
@@ -1605,11 +1608,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <p style="font-size:15px;color:#6b7a99;margin-top:8px;">Los egresos de CxP pagadas se registran automáticamente aquí.</p>
   </div>
   <div class="transactions-section">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3>Historial de Egresos</h3>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;" onclick="abrirRevisionDuplicados('egresos')">🔍 Revisar Posibles Duplicados</button>
-      <button class="btn btn-secondary" style="font-size:13px;padding:8px 14px;margin-left:8px;" onclick="repararCategoriaEgresosPrestamos()">🔧 Reparar Categoría de Préstamos</button>
-    </div>
+    <h3>Historial de Egresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
         <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="renderEgresos()" placeholder="Suplidor, categoría o descripción..." style="width:100%;box-sizing:border-box;">
@@ -3863,17 +3862,29 @@ function calcDue(){
 }
 
 // Subtotal → ITBIS (18%, editable a mano) → Total (siempre automático, no editable)
-// Mismo patrón que calcCxCTotales, aplicado a Registrar Egreso: Subtotal → ITBIS (18%,
-// ajustable a mano) → Total (Subtotal+ITBIS, también ajustable si el gasto real no calza exacto).
+// Mismo patrón que calcCxCTotales, aplicado a Registrar Egreso: Subtotal → ITBIS (solo si la
+// casilla está marcada, 18% ajustable a mano) → Total (Subtotal+ITBIS, o solo Subtotal si no
+// aplica ITBIS — no todo egreso lleva ITBIS, así que nunca se asume por defecto).
+function toggleEgrItbis(){
+  const chk=document.getElementById('egr-tiene-itbis');
+  const itbisEl=document.getElementById('egr-itbis');
+  itbisEl.disabled=!chk.checked;
+  itbisEl.style.opacity=chk.checked?'1':'.4';
+  if(!chk.checked) itbisEl.value='';
+  calcEgresoTotales(false);
+}
 function calcEgresoTotales(itbisEditadoAMano){
   const subEl=document.getElementById('egr-subtotal');
   const itbisEl=document.getElementById('egr-itbis');
   const totalEl=document.getElementById('egr-monto');
+  const tieneItbis=document.getElementById('egr-tiene-itbis')?.checked;
   const sub=numVal(subEl)||0;
-  if(!itbisEditadoAMano){
+  if(!tieneItbis){
+    itbisEl.value='';
+  } else if(!itbisEditadoAMano){
     if(sub>0) setMontoValue(itbisEl,sub*0.18); else itbisEl.value='';
   }
-  const itbis=numVal(itbisEl)||0;
+  const itbis=tieneItbis?(numVal(itbisEl)||0):0;
   const total = sub+itbis;
   if(total>0) setMontoValue(totalEl,total); else totalEl.value='';
 }
@@ -8018,6 +8029,8 @@ function addEgreso(auto=false,data={}){
       document.getElementById('egr-subtotal').value='';
       document.getElementById('egr-monto').value='';
       document.getElementById('egr-itbis').value='';
+      document.getElementById('egr-tiene-itbis').checked=false;
+      toggleEgrItbis();
       document.getElementById('egr-desc').value='';
       document.getElementById('egr-numfactura').value='';
       document.getElementById('egr-categoria').selectedIndex=0;
