@@ -3363,7 +3363,9 @@ function onFMethodChange(i){
   const method=document.getElementById(`f-method-${i}`).value;
   const wrap=document.getElementById(`f-related-wrap-${i}`);
   if(!wrap)return;
-  if(method==='transferencia'){
+  // "Retiro de Efectivo" también puede ser un movimiento interno (ej. sacar de un banco para
+  // meterlo a Caja General) — no solo "Transferencia" — así que activa el mismo campo de vínculo.
+  if(method==='transferencia' || method==='retiro'){
     wrap.style.display='';
     populateRelatedAccounts(i);
     onFTypeChange(i);
@@ -3435,7 +3437,7 @@ function _addTxConfirmed(i,date,type,method,amount,desc,ref=''){
   // solo para saber si es dinero nuevo o solo cambió de bolsillo entre tus propias cuentas.
   const relSel=document.getElementById(`f-related-${i}`);
   const relIdx=relSel?parseInt(relSel.value):NaN;
-  const esInterna = method==='transferencia' && !isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length && relIdx!==i;
+  const esInterna = (method==='transferencia'||method==='retiro') && !isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length && relIdx!==i;
 
   pushTx(i,{id:Date.now(),date,type,method,amount,desc,ref,esTransferenciaInterna:esInterna});
 
