@@ -745,15 +745,15 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <p id="pinGateSubtitle" style="color:#9ca3af;font-size:15px;margin:0 0 20px;line-height:1.4;">Ingresa tu PIN para continuar.</p>
       <div id="pinGateOldWrap" style="display:none;margin-bottom:12px;">
         <label style="display:block;margin-bottom:6px;color:#9ca3af;font-size:15px;">PIN Actual</label>
-        <input type="password" id="pin-input-old" maxlength="8" autocomplete="off" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
+        <input type="password" id="pin-input-old" maxlength="8" autocomplete="new-password" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
       </div>
       <div style="margin-bottom:12px;">
         <label id="pinGateLabel1" style="display:block;margin-bottom:6px;color:#9ca3af;font-size:15px;">PIN</label>
-        <input type="password" id="pin-input-1" maxlength="8" autocomplete="off" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
+        <input type="password" id="pin-input-1" maxlength="8" autocomplete="new-password" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
       </div>
       <div id="pinGateConfirmWrap" style="display:none;margin-bottom:12px;">
         <label style="display:block;margin-bottom:6px;color:#9ca3af;font-size:15px;">Confirmar PIN</label>
-        <input type="password" id="pin-input-2" maxlength="8" autocomplete="off" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
+        <input type="password" id="pin-input-2" maxlength="8" autocomplete="new-password" style="width:100%;height:44px;box-sizing:border-box;text-align:center;letter-spacing:.3em;font-size:18px;" onkeydown="if(event.key==='Enter')confirmPinGate()">
       </div>
       <div id="pin-gate-error" style="color:#ef4444;font-size:15px;margin-bottom:10px;display:none;"></div>
       <div id="pinGateForgotWrap" style="display:none;text-align:center;margin-bottom:14px;">
@@ -1381,7 +1381,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <h3>Historial de Ingresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
-        <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="renderIngresos()" placeholder="Cliente, categoría o descripción..." style="width:100%;box-sizing:border-box;">
+        <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="debounceSearch(renderIngresos)" placeholder="Cliente, categoría o descripción..." style="width:100%;box-sizing:border-box;">
         <datalist id="ing-search-datalist"></datalist>
       </div>
       <div class="form-group"><label>Mes</label><input autocomplete="off" type="month" id="ing-filter-mes" oninput="renderIngresos()" style="width:160px;"></div>
@@ -1611,7 +1611,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <h3>Historial de Egresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
-        <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="renderEgresos()" placeholder="Suplidor, categoría o descripción..." style="width:100%;box-sizing:border-box;">
+        <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="debounceSearch(renderEgresos)" placeholder="Suplidor, categoría o descripción..." style="width:100%;box-sizing:border-box;">
         <datalist id="egr-search-datalist"></datalist>
       </div>
       <div class="form-group"><label>Mes</label><input autocomplete="off" type="month" id="egr-filter-mes" oninput="renderEgresos()" style="width:160px;"></div>
@@ -2776,7 +2776,13 @@ function save(){
   window._fbSaveTimer = setTimeout(()=>{
     if(!window.ICG_DOC){return;}
     _lastLocalSaveTs = ts;
-    const payload = JSON.parse(JSON.stringify({...S, _ts: ts}));
+    // structuredClone es una copia nativa del navegador — bastante más rápida que convertir
+    // todo el sistema a texto y de vuelta (JSON.stringify+parse), sobre todo a medida que se
+    // acumulan más facturas/ingresos/egresos con el tiempo. Menos trabajo bloqueando la
+    // pantalla justo cuando estás escribiendo.
+    let payload;
+    try { payload = structuredClone(S); } catch(e){ payload = JSON.parse(JSON.stringify(S)); }
+    payload._ts = ts;
     window.ICG_DOC.set(payload)
       .then(()=>{ showSyncIndicator('saved'); markSavedAt(); })
       .catch(err=>{ console.error('Firebase save error:', err); showSyncIndicator('error'); markSaveError(); });
@@ -2811,6 +2817,14 @@ function startAutoSaveTimer(){
 
 // ══════════════════ HELPERS ══════════════════
 function fmt(n){return new Intl.NumberFormat('es-DO',{style:'currency',currency:'DOP',minimumFractionDigits:2,maximumFractionDigits:2}).format(n||0);}
+// Pequeña espera antes de re-renderizar tras cada tecla en un buscador — sin esto, escribir en
+// un campo de búsqueda reconstruye la tabla completa letra por letra, sintiéndose "trabado" a
+// medida que se acumulan más registros (cientos de facturas/ingresos/egresos).
+let _searchDebounceTimer=null;
+function debounceSearch(fn){
+  clearTimeout(_searchDebounceTimer);
+  _searchDebounceTimer=setTimeout(fn,250);
+}
 // Formatea en vivo un campo de monto con separador de miles mientras el usuario escribe
 // (ej. "78450" -> "78,450"), manteniendo el punto decimal usable.
 function formatMontoInput(el){
@@ -2923,7 +2937,13 @@ function toggleTipoVenta(section, id){
 // ══════════════════ INIT ══════════════════
 function init(){
   ensureEstadoIntegro();
-  aplicarEstiloHUDATodosLosModales();
+  // El marco decorativo "HUD" (desenfoque animado, flote, barrido de luz) se estaba aplicando
+  // a TODOS los modales del sistema — 3-4 animaciones infinitas encendiéndose de golpe cada vez
+  // que abrías cualquier ventana, incluso las que usas todo el día (Registrar Pago, Gestionar
+  // Categorías). Eso es lo que se sentía como "lentitud al abrir un modal". Se desactiva para
+  // todos, y se queda únicamente donde ya estaba puesto a mano (Cargar Factura de Venta), que
+  // es donde de verdad aporta algo visualmente y se abre con poca frecuencia.
+  // aplicarEstiloHUDATodosLosModales();
   document.getElementById('cc-date').value=today();
   document.getElementById('cxc-issued').value=today();
   document.getElementById('ing-fecha').value=today();
