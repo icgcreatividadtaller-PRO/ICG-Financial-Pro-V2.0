@@ -1941,6 +1941,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-report" onclick="openReport('all','quincenal')">Reporte Quincenal</button>
       <button class="btn btn-report" onclick="openReport('all','mensual')">Reporte Mensual</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
+      <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
     </div>
   </div>
   <div class="totals-bar" id="globalTotals"></div>
@@ -3894,6 +3895,70 @@ function toggleEgrItbis(){
   itbisEl.style.opacity=chk.checked?'1':'.4';
   if(!chk.checked) itbisEl.value='';
   calcEgresoTotales(false);
+}
+// Reparación: por el bug de "Cuenta Bancaria" que se quedaba pegada en "Histórico" (ya
+// corregido), algunos Ingresos/Egresos quedaron marcados como esHistorico sin que el usuario lo
+// eligiera a propósito — nunca descontaron/acreditaron ninguna cuenta real. Esto los lista para
+// que el usuario elija la cuenta bancaria correcta de cada uno, uno por uno.
+function revisarHistoricosSinQuerer(){
+  const afectados=[
+    ...S.egresos.filter(x=>x.esHistorico).map(x=>({tipo:'egreso',x})),
+    ...S.ingresos.filter(x=>x.esHistorico).map(x=>({tipo:'ingreso',x}))
+  ].sort((a,b)=>a.x.fecha.localeCompare(b.x.fecha));
+
+  if(!afectados.length){
+    icgAlert('No hay ningún Ingreso o Egreso marcado como "Histórico" en este momento.','Sin Registros Históricos');
+    return;
+  }
+  const modalId='revisarHistModal';
+  let modal=document.getElementById(modalId);
+  if(!modal){
+    modal=document.createElement('div');
+    modal.id=modalId;
+    modal.className='modal-overlay';
+    modal.innerHTML=`<div class="modal" style="max-width:640px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h2 style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">Registros Marcados como "Histórico"</h2>
+        <button class="modal-close" onclick="document.getElementById('${modalId}').classList.remove('open')">✕</button>
+      </div>
+      <p style="font-size:14px;color:#9ca3af;margin-bottom:14px;">Si alguno de estos NO debía ser histórico, elige la cuenta bancaria real de la que salió/entró el dinero — se corrige el saldo de esa cuenta automáticamente. Si de verdad fue histórico a propósito, déjalo en "Histórico".</p>
+      <div id="revisarHistLista" style="max-height:420px;overflow-y:auto;"></div>
+    </div>`;
+    document.body.appendChild(modal);
+  }
+  const lista=document.getElementById('revisarHistLista');
+  lista.innerHTML=afectados.map(({tipo,x},i)=>{
+    const opts=S.accounts.map((a,idx)=>`<option value="${idx}">${esc(a.name)}</option>`).join('');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--border2);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;color:#c0c6d8;">${fmtDate(x.fecha)} — ${esc(x.desc||x.clienteNombre||x.suplidorNombre||'')} — <strong style="color:${tipo==='ingreso'?'#4ade80':'#ef4444'};">${fmt(x.monto)}</strong></div>
+      </div>
+      <select id="revisarHist-${tipo}-${x.id}" style="width:180px;flex-shrink:0;height:38px;">
+        <option value="none">Histórico (dejar así)</option>
+        ${opts}
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="corregirHistoricoSinQuerer('${tipo}',${x.id})">Aplicar</button>
+    </div>`;
+  }).join('');
+  modal.classList.add('open');
+}
+function corregirHistoricoSinQuerer(tipo,id){
+  const sel=document.getElementById(`revisarHist-${tipo}-${id}`);
+  const val=sel.value;
+  if(val==='none') return; // se deja como histórico, nada que hacer
+  const idx=parseInt(val);
+  const arr = tipo==='ingreso' ? S.ingresos : S.egresos;
+  const x=arr.find(r=>r.id===id); if(!x) return;
+  x.esHistorico=false;
+  x.cuentaIdx=idx;
+  const txMethod = tipo==='ingreso' ? 'transferencia' : (x.metodo||'transferencia');
+  pushTx(idx,{id:Date.now(),date:x.fecha,type:tipo==='ingreso'?'ingreso':'egreso',method:txMethod,amount:x.monto,
+    desc:(tipo==='ingreso'?'Ingreso corregido — ':'Egreso corregido — ')+(x.desc||'')});
+  save();
+  if(tipo==='ingreso') renderIngresos(); else renderEgresos();
+  renderTx(idx);
+  notify('success','Corregido',`Se acreditó/descontó ${fmt(x.monto)} en ${esc(S.accounts[idx].name)}.`);
+  revisarHistoricosSinQuerer(); // refresca la lista, ya sin este
 }
 function calcEgresoTotales(itbisEditadoAMano){
   const subEl=document.getElementById('egr-subtotal');
@@ -6489,6 +6554,10 @@ function addIngreso(auto=false,data={}){
       document.getElementById('ing-desc').value='';
       document.getElementById('ing-ref').value='';
       setTipoVenta('ing','corporativa');
+      // Mismo arreglo que en Egresos — "Cuenta Bancaria" nunca se reseteaba, quedando pegada en
+      // "Histórico" si alguna vez se seleccionaba para un solo ingreso.
+      const cuentaSel=document.getElementById('ing-cuenta');
+      if(cuentaSel && cuentaSel.options.length) cuentaSel.selectedIndex=0;
     }
   };
 
@@ -8057,6 +8126,11 @@ function addEgreso(auto=false,data={}){
       document.getElementById('egr-numfactura').value='';
       document.getElementById('egr-categoria').selectedIndex=0;
       document.getElementById('egr-ref').value='';
+      // "Cuenta Bancaria" NUNCA se reseteaba — si alguna vez elegías "Histórico" para un solo
+      // egreso, ese valor se quedaba pegado ahí para todos los siguientes, sin que se notara.
+      // Ahora siempre vuelve a la primera cuenta bancaria real después de cada registro.
+      const cuentaSel=document.getElementById('egr-cuenta');
+      if(cuentaSel && cuentaSel.options.length) cuentaSel.selectedIndex=0;
     }
   };
 
