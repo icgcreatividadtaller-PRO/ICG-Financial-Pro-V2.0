@@ -1943,6 +1943,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarTransferenciasSinPareja()">🔍 Diagnosticar Transferencias Sin Pareja</button>
+      <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarCuentaPorCuenta()">🔍 Diagnosticar Cuenta por Cuenta</button>
     </div>
   </div>
   <div class="totals-bar" id="globalTotals"></div>
@@ -5843,6 +5844,31 @@ function renderComparativo(){
 // Ingresos/Egresos reales para no inflar los reportes) que NO tienen una pareja real
 // correspondiente en la otra cuenta — si existe una así, el dinero "se esfuma" de los reportes
 // sin que ninguna otra cuenta lo haya recibido/enviado de verdad, causando un descuadre real.
+// Diagnóstico definitivo: compara, CUENTA POR CUENTA, cuánto subió/bajó el saldo real de cada
+// banco contra cuánto DEBERÍA haber subido/bajado según los Ingresos y Egresos que dicen haber
+// pasado por esa misma cuenta (sin contar los marcados "Histórico", que a propósito no tocan
+// ninguna cuenta). Si en algún banco estos dos números no coinciden, ahí está la fuga exacta —
+// dinero que entró/salió del banco sin que ningún Ingreso/Egreso lo explique, o viceversa.
+function diagnosticarCuentaPorCuenta(){
+  const filas = S.accounts.map((acc,i)=>{
+    const cambioReal = (acc.transactions||[]).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
+    const ingresosReg = S.ingresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
+    const egresosReg = S.egresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
+    // Impuestos/comisiones bancarias (tipo 'impuesto' en la cuenta) también generan su propio
+    // Egreso — ya están contados dentro de ingresosReg/egresosReg vía addEgreso, así que no se
+    // duplican aquí; cambioReal ya los incluye igual, vía el bucle de transactions.
+    const esperado = ingresosReg - egresosReg;
+    const diff = Math.round((cambioReal-esperado)*100)/100;
+    return {nombre:acc.name, cambioReal, esperado, diff};
+  });
+  const conDiferencia = filas.filter(f=>Math.abs(f.diff)>=1);
+  const detalle = filas.map(f=>`${f.nombre}: cambio real ${fmt(f.cambioReal)} vs esperado ${fmt(f.esperado)} → ${Math.abs(f.diff)<1?'✅ coincide':'⚠️ <strong>diferencia de '+fmt(f.diff)+'</strong>'}`).join('<br>');
+  if(!conDiferencia.length){
+    icgAlert(`Todas las cuentas coinciden entre su cambio real y lo que sus Ingresos/Egresos registrados explican:<br><br>${detalle}<br><br>La causa del descuadre general está en otra parte (CxC/CxP, ITBIS, o Activos Fijos) — no en un desajuste banco-por-banco.`,'Todas las Cuentas Cuadran');
+  } else {
+    icgAlert(`Se encontró diferencia en ${conDiferencia.length} cuenta(s):<br><br>${detalle}<br><br>Revisa el historial de movimientos de la(s) cuenta(s) marcada(s) con ⚠️ — ahí debería estar el origen exacto.`,'⚠️ Diferencia Encontrada por Cuenta');
+  }
+}
 function diagnosticarTransferenciasSinPareja(){
   const sueltas=[];
   S.accounts.forEach((acc,i)=>{
