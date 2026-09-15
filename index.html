@@ -5851,22 +5851,24 @@ function renderComparativo(){
 // dinero que entró/salió del banco sin que ningún Ingreso/Egreso lo explique, o viceversa.
 function diagnosticarCuentaPorCuenta(){
   const filas = S.accounts.map((acc,i)=>{
-    const cambioReal = (acc.transactions||[]).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
+    // El cambio real se calcula SIN las transferencias internas entre tus propias cuentas —
+    // esas nunca generan un Ingreso/Egreso registrado (a propósito, no son ventas ni gastos),
+    // así que compararlas directo contra "esperado" las marcaría como error sin serlo.
+    const transacciones = acc.transactions||[];
+    const cambioRealSinTransferencias = transacciones.filter(t=>!t.esTransferenciaInterna).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
+    const transferenciasNetas = transacciones.filter(t=>t.esTransferenciaInterna).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
     const ingresosReg = S.ingresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
     const egresosReg = S.egresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
-    // Impuestos/comisiones bancarias (tipo 'impuesto' en la cuenta) también generan su propio
-    // Egreso — ya están contados dentro de ingresosReg/egresosReg vía addEgreso, así que no se
-    // duplican aquí; cambioReal ya los incluye igual, vía el bucle de transactions.
     const esperado = ingresosReg - egresosReg;
-    const diff = Math.round((cambioReal-esperado)*100)/100;
-    return {nombre:acc.name, cambioReal, esperado, diff};
+    const diff = Math.round((cambioRealSinTransferencias-esperado)*100)/100;
+    return {nombre:acc.name, cambioRealSinTransferencias, transferenciasNetas, esperado, diff};
   });
   const conDiferencia = filas.filter(f=>Math.abs(f.diff)>=1);
-  const detalle = filas.map(f=>`${f.nombre}: cambio real ${fmt(f.cambioReal)} vs esperado ${fmt(f.esperado)} → ${Math.abs(f.diff)<1?'✅ coincide':'⚠️ <strong>diferencia de '+fmt(f.diff)+'</strong>'}`).join('<br>');
+  const detalle = filas.map(f=>`${f.nombre}: movimientos propios ${fmt(f.cambioRealSinTransferencias)}${Math.abs(f.transferenciasNetas)>=1?' (+ transferencias '+fmt(f.transferenciasNetas)+')':''} vs esperado ${fmt(f.esperado)} → ${Math.abs(f.diff)<1?'✅ coincide':'⚠️ <strong>diferencia de '+fmt(f.diff)+'</strong>'}`).join('<br>');
   if(!conDiferencia.length){
-    icgAlert(`Todas las cuentas coinciden entre su cambio real y lo que sus Ingresos/Egresos registrados explican:<br><br>${detalle}<br><br>La causa del descuadre general está en otra parte (CxC/CxP, ITBIS, o Activos Fijos) — no en un desajuste banco-por-banco.`,'Todas las Cuentas Cuadran');
+    icgAlert(`Todas las cuentas coinciden (ya excluyendo transferencias internas legítimas):<br><br>${detalle}<br><br>La causa del descuadre general está en otra parte (CxC/CxP, ITBIS, o Activos Fijos) — no en un desajuste banco-por-banco.`,'Todas las Cuentas Cuadran');
   } else {
-    icgAlert(`Se encontró diferencia en ${conDiferencia.length} cuenta(s):<br><br>${detalle}<br><br>Revisa el historial de movimientos de la(s) cuenta(s) marcada(s) con ⚠️ — ahí debería estar el origen exacto.`,'⚠️ Diferencia Encontrada por Cuenta');
+    icgAlert(`Se encontró diferencia REAL (después de excluir transferencias) en ${conDiferencia.length} cuenta(s):<br><br>${detalle}<br><br>Revisa el historial de movimientos de la(s) cuenta(s) marcada(s) con ⚠️ — ahí debería estar el origen exacto.`,'⚠️ Diferencia Encontrada por Cuenta');
   }
 }
 function diagnosticarTransferenciasSinPareja(){
