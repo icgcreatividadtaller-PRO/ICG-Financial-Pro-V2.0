@@ -1944,6 +1944,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarTransferenciasSinPareja()">🔍 Diagnosticar Transferencias Sin Pareja</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarCuentaPorCuenta()">🔍 Diagnosticar Cuenta por Cuenta</button>
+      <button class="btn btn-secondary" style="font-size:13px;background:rgba(253,201,1,.1);border-color:rgba(253,201,1,.4);color:#fdc901;" onclick="verificacionMaestra()">🔍 Verificación Maestra</button>
     </div>
   </div>
   <div class="totals-bar" id="globalTotals"></div>
@@ -5849,6 +5850,49 @@ function renderComparativo(){
 // pasado por esa misma cuenta (sin contar los marcados "Histórico", que a propósito no tocan
 // ninguna cuenta). Si en algún banco estos dos números no coinciden, ahí está la fuga exacta —
 // dinero que entró/salió del banco sin que ningún Ingreso/Egreso lo explique, o viceversa.
+// Verificación maestra: junta, en un solo lugar, cada pieza que alimenta la ecuación del
+// Balance General — para encontrar en cuál pieza específica se rompe, en vez de intentar
+// reconstruirlo a mano (donde ya nos hemos equivocado). Muestra el mismo cálculo de dos formas
+// distintas e independientes, que DEBERÍAN dar el mismo resultado si todo está consistente.
+function verificacionMaestra(){
+  const totalIngresos = S.ingresos.reduce((s,x)=>s+x.monto,0);
+  const totalEgresos = S.egresos.reduce((s,x)=>s+x.monto,0);
+  const histIngresos = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const histEgresos = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const efectivoNoBancarizado = histIngresos - histEgresos;
+
+  let sumaInicial=0, sumaActual=0;
+  S.accounts.forEach(acc=>{
+    sumaInicial += acc.initialBalance||0;
+    let bal = acc.initialBalance||0;
+    (acc.transactions||[]).forEach(t=>{ bal += t.type==='ingreso' ? t.amount : -t.amount; });
+    sumaActual += bal;
+  });
+  const cambioTotalBancos = sumaActual - sumaInicial;
+
+  // Vía 1: lo que Ingresos/Egresos NO históricos predicen que debió pasar en los bancos
+  const ingresosNoHist = totalIngresos - histIngresos;
+  const egresosNoHist = totalEgresos - histEgresos;
+  const cambioEsperadoBancos = ingresosNoHist - egresosNoHist;
+
+  const diffBancos = Math.round((cambioTotalBancos - cambioEsperadoBancos)*100)/100;
+
+  const msg = `
+    <strong>Ingresos (todo, histórico incluido):</strong> ${fmt(totalIngresos)}<br>
+    <strong>− Egresos (todo, histórico incluido):</strong> ${fmt(totalEgresos)}<br>
+    <strong>= Utilidades Retenidas:</strong> ${fmt(totalIngresos-totalEgresos)}<br><br>
+    <strong>Histórico Ingresos:</strong> ${fmt(histIngresos)}<br>
+    <strong>− Histórico Egresos:</strong> ${fmt(histEgresos)}<br>
+    <strong>= Efectivo No Bancarizado (Activo 1050):</strong> ${fmt(efectivoNoBancarizado)}<br><br>
+    <strong>Saldo bancos: inicial</strong> ${fmt(sumaInicial)} <strong>→ actual</strong> ${fmt(sumaActual)}<br>
+    <strong>= Cambio real en bancos:</strong> ${fmt(cambioTotalBancos)}<br><br>
+    <strong>Ingresos NO históricos:</strong> ${fmt(ingresosNoHist)}<br>
+    <strong>− Egresos NO históricos:</strong> ${fmt(egresosNoHist)}<br>
+    <strong>= Cambio ESPERADO en bancos:</strong> ${fmt(cambioEsperadoBancos)}<br><br>
+    <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong>
+  `;
+  icgAlert(msg, 'Verificación Maestra');
+}
 function diagnosticarCuentaPorCuenta(){
   const filas = S.accounts.map((acc,i)=>{
     // El cambio real se calcula SIN las transferencias internas entre tus propias cuentas —
