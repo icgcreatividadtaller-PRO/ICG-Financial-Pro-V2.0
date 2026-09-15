@@ -1942,6 +1942,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-report" onclick="openReport('all','mensual')">Reporte Mensual</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
+      <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarTransferenciasSinPareja()">🔍 Diagnosticar Transferencias Sin Pareja</button>
     </div>
   </div>
   <div class="totals-bar" id="globalTotals"></div>
@@ -3421,7 +3422,7 @@ function addTx(i){
 
   const relSel=document.getElementById(`f-related-${i}`);
   const relIdx=relSel?parseInt(relSel.value):NaN;
-  const esTransferenciaInterna = method==='transferencia' && !isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length;
+  const esTransferenciaInterna = (method==='transferencia'||method==='retiro') && !isNaN(relIdx) && relIdx>=0 && relIdx<S.accounts.length;
   const esMovimientoSeguro = esTransferenciaInterna || type==='impuesto';
 
   const continuarConMovimientoDeNegocio=()=>{
@@ -5838,6 +5839,31 @@ function renderComparativo(){
 // (el lado auto-generado siempre dice "Transferencia recibida de X" / "Transferencia enviada a
 // X"), y desde ahí se busca su pareja (misma fecha, mismo monto, tipo opuesto, método
 // transferencia) en la cuenta correspondiente para marcar ambos lados.
+// Diagnóstico: busca transacciones marcadas como "transferencia interna" (excluidas de
+// Ingresos/Egresos reales para no inflar los reportes) que NO tienen una pareja real
+// correspondiente en la otra cuenta — si existe una así, el dinero "se esfuma" de los reportes
+// sin que ninguna otra cuenta lo haya recibido/enviado de verdad, causando un descuadre real.
+function diagnosticarTransferenciasSinPareja(){
+  const sueltas=[];
+  S.accounts.forEach((acc,i)=>{
+    (acc.transactions||[]).forEach(t=>{
+      if(!t.esTransferenciaInterna) return;
+      const otroTipo = t.type==='ingreso' ? 'egreso' : 'ingreso';
+      const tienePareja = S.accounts.some((acc2,j)=>{
+        if(j===i) return false;
+        return (acc2.transactions||[]).some(t2=>
+          t2.esTransferenciaInterna && t2.type===otroTipo && t2.date===t.date && Math.abs(t2.amount-t.amount)<0.01);
+      });
+      if(!tienePareja) sueltas.push({acc,t});
+    });
+  });
+  if(!sueltas.length){
+    icgAlert('Todas las transferencias internas marcadas tienen su pareja correspondiente en la otra cuenta. No es la causa del descuadre.','Sin Transferencias Sueltas');
+    return;
+  }
+  const detalle=sueltas.map(({acc,t})=>`• ${fmtDate(t.date)} — ${esc(acc.name)} — ${t.type==='ingreso'?'+':'−'}${fmt(t.amount)} — ${esc(t.desc)}`).join('<br>');
+  icgAlert(`Se encontraron <strong>${sueltas.length}</strong> transacción(es) marcadas como transferencia interna SIN una pareja correspondiente en otra cuenta — este dinero está afectando el saldo bancario real, pero no cuenta como Ingreso/Egreso en ningún reporte, ni tiene su otro lado. Esta es muy probablemente la causa del descuadre:<br><br>${detalle}`,'⚠️ Transferencias Sin Pareja Encontradas');
+}
 function repararTransferenciasInternas(){
   const afectados=[];
   const nombreAIdx = {}; S.accounts.forEach((a,i)=>{ nombreAIdx[a.name]=i; });
