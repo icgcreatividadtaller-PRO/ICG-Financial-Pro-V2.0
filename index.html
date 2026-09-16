@@ -5326,8 +5326,8 @@ function renderBalanceGeneral(){
   // Capital vía Utilidades Retenidas — sin este Activo, ese dinero quedaría "flotando" sin
   // ninguna contraparte, descuadrando el Balance para siempre (nunca se resuelve solo, a
   // diferencia de CxC/CxP pendientes). Este Activo representa ese efectivo/valor no bancarizado.
-  const historicoIngresosNeto = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
-  const historicoEgresosNeto = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const historicoIngresosNeto = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.itbis||0),0);
+  const historicoEgresosNeto = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
   const efectivoNoBancarizado = historicoIngresosNeto - historicoEgresosNeto;
   const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos + efectivoNoBancarizado;
 
@@ -5375,7 +5375,13 @@ function renderBalanceGeneral(){
   const tarjetaAperturaAdeudo = Math.max(0, limitRD - (S.creditCard.initAvailRD ?? S.creditCard.availableRD ?? 0));
   const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD - tarjetaAperturaAdeudo; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte, menos deuda (préstamos y tarjeta) que ya existía en ese momento
   const ingresosNetosHistoricos = S.ingresos.reduce((s,x)=>s+x.monto-( x.itbis||0),0);
-  const egresosHistoricos = S.egresos.reduce((s,x)=>s+x.monto,0);
+  // El ITBIS que pagas en tus COMPRAS (crédito fiscal) no es un gasto real tuyo — ya lo estás
+  // recuperando reduciendo lo que le debes a la DGII (ver itbisCreditoFiscal arriba). Antes se
+  // contaba dos veces: una vez bajando el Pasivo (correcto) y otra vez bajando tu Utilidad como
+  // si de verdad lo hubieras gastado (incorrecto). Se excluye aquí, igual que ya se excluye del
+  // lado de Ingresos — simétrico. Las remesas pagadas directo a la DGII (categoria==='itbis')
+  // no aplican esta resta, porque ESAS sí son la salida de efectivo real, sin nada que recuperar.
+  const egresosHistoricos = S.egresos.reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
   const utilidadesRetenidas = ingresosNetosHistoricos - egresosHistoricos;
   const distribucionesHistoricas = S.distribuciones.reduce((s,x)=>s+x.monto,0);
   const totalCapital = capitalTitular + utilidadesRetenidas - distribucionesHistoricas;
@@ -5855,10 +5861,10 @@ function renderComparativo(){
 // reconstruirlo a mano (donde ya nos hemos equivocado). Muestra el mismo cálculo de dos formas
 // distintas e independientes, que DEBERÍAN dar el mismo resultado si todo está consistente.
 function verificacionMaestra(){
-  const totalIngresos = S.ingresos.reduce((s,x)=>s+x.monto,0);
-  const totalEgresos = S.egresos.reduce((s,x)=>s+x.monto,0);
-  const histIngresos = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
-  const histEgresos = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const totalIngresos = S.ingresos.reduce((s,x)=>s+x.monto-(x.itbis||0),0);
+  const totalEgresos = S.egresos.reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
+  const histIngresos = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.itbis||0),0);
+  const histEgresos = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
   const efectivoNoBancarizado = histIngresos - histEgresos;
 
   let sumaInicial=0, sumaActual=0;
@@ -5870,24 +5876,26 @@ function verificacionMaestra(){
   });
   const cambioTotalBancos = sumaActual - sumaInicial;
 
-  // Vía 1: lo que Ingresos/Egresos NO históricos predicen que debió pasar en los bancos
-  const ingresosNoHist = totalIngresos - histIngresos;
-  const egresosNoHist = totalEgresos - histEgresos;
-  const cambioEsperadoBancos = ingresosNoHist - egresosNoHist;
+  // Vía 1: lo que Ingresos/Egresos NO históricos predicen que debió pasar en los bancos — aquí
+  // SÍ se usa el monto bruto (con ITBIS), porque al banco entra/sale el efectivo completo, el
+  // ITBIS no desaparece del movimiento bancario, solo de la Utilidad.
+  const ingresosNoHistBruto = S.ingresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const egresosNoHistBruto = S.egresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  const cambioEsperadoBancos = ingresosNoHistBruto - egresosNoHistBruto;
 
   const diffBancos = Math.round((cambioTotalBancos - cambioEsperadoBancos)*100)/100;
 
   const msg = `
-    <strong>Ingresos (todo, histórico incluido):</strong> ${fmt(totalIngresos)}<br>
-    <strong>− Egresos (todo, histórico incluido):</strong> ${fmt(totalEgresos)}<br>
+    <strong>Ingresos (todo, neto de ITBIS):</strong> ${fmt(totalIngresos)}<br>
+    <strong>− Egresos (todo, neto de ITBIS de compras):</strong> ${fmt(totalEgresos)}<br>
     <strong>= Utilidades Retenidas:</strong> ${fmt(totalIngresos-totalEgresos)}<br><br>
-    <strong>Histórico Ingresos:</strong> ${fmt(histIngresos)}<br>
-    <strong>− Histórico Egresos:</strong> ${fmt(histEgresos)}<br>
+    <strong>Histórico Ingresos (neto):</strong> ${fmt(histIngresos)}<br>
+    <strong>− Histórico Egresos (neto):</strong> ${fmt(histEgresos)}<br>
     <strong>= Efectivo No Bancarizado (Activo 1050):</strong> ${fmt(efectivoNoBancarizado)}<br><br>
     <strong>Saldo bancos: inicial</strong> ${fmt(sumaInicial)} <strong>→ actual</strong> ${fmt(sumaActual)}<br>
     <strong>= Cambio real en bancos:</strong> ${fmt(cambioTotalBancos)}<br><br>
-    <strong>Ingresos NO históricos:</strong> ${fmt(ingresosNoHist)}<br>
-    <strong>− Egresos NO históricos:</strong> ${fmt(egresosNoHist)}<br>
+    <strong>Ingresos NO históricos (bruto, como entra al banco):</strong> ${fmt(ingresosNoHistBruto)}<br>
+    <strong>− Egresos NO históricos (bruto, como sale del banco):</strong> ${fmt(egresosNoHistBruto)}<br>
     <strong>= Cambio ESPERADO en bancos:</strong> ${fmt(cambioEsperadoBancos)}<br><br>
     <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong>
   `;
