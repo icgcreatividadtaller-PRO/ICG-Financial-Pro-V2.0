@@ -1942,6 +1942,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-report" onclick="openReport('all','mensual')">Reporte Mensual</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
+      <button class="btn btn-secondary" style="font-size:13px;" onclick="repararEgresosFaltantesCaja()">🔧 Reparar Egresos Faltantes de Caja</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarTransferenciasSinPareja()">🔍 Diagnosticar Transferencias Sin Pareja</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarCuentaPorCuenta()">🔍 Diagnosticar Cuenta por Cuenta</button>
       <button class="btn btn-secondary" style="font-size:13px;background:rgba(253,201,1,.1);border-color:rgba(253,201,1,.4);color:#fdc901;" onclick="verificacionMaestra()">🔍 Verificación Maestra</button>
@@ -2712,6 +2713,11 @@ function notifyQuick(type, title, msg=''){
 // ══════════════════ STATE ══════════════════
 const NUM_ACCOUNTS = 6;
 const STORE_KEY = 'banca_v3_v2sistema';
+// Fecha de arranque de la V2.0 — el ITBIS de cualquier factura emitida ANTES de esta fecha
+// ya se declaró y se pagó en la V1 (o de forma informal, si es "Histórico"). Nunca debe
+// volver a contarse como obligación pendiente en esta versión. Cualquier factura emitida
+// DESDE esta fecha en adelante sí genera una obligación de ITBIS real y actual.
+const CUTOVER_V2 = '2026-08-27';
 
 function defaultState() {
   return {
@@ -2755,7 +2761,15 @@ function defaultState() {
       {id:10,nombre:'Computadoras',monto:50000.00,fecha:null}
     ],
     recibos: [],
-    recibosCounter: 0
+    recibosCounter: 0,
+    // Capital de Apertura — Transición V1→V2.0: plug fijo, calculado UNA SOLA VEZ. Representa
+    // ÚNICAMENTE el ITBIS ya recuperado de las 8 facturas de ANTILLANA COMERCIAL (emitidas antes
+    // del 27-ago-2026, cobradas ya dentro de la V2.0): ese ITBIS ya se había pagado a la DGII con
+    // otro dinero antes de que existiera este sistema, así que cuando el cliente por fin pagó, ese
+    // dinero llegó al banco sin ninguna contraparte en Capital — este ajuste se la da, una sola
+    // vez, para siempre. No tiene nada que ver con "Ajuste de Corte de Balance" (que es para
+    // corregir errores de captura en una cuenta bancaria).
+    capitalAperturaTransicion: 19836.00
   };
 }
 
@@ -4161,6 +4175,19 @@ function cxcPending(x){ return Math.max(0, x.amount - cxcPaidSoFar(x)); }
 // que una pagada para efectos de KPIs, Flujo de Caja y listas de "pendientes".
 function cxcEstaResuelta(x){ return x.estado==='pagada' || x.estado==='anulada'; }
 
+// Encuentra la factura de CxC de la que proviene un Ingreso (por fuenteId — puede apuntar al
+// id de la factura misma, o al id de uno de sus pagos parciales/con retención). Devuelve null
+// si el Ingreso es una venta directa sin factura vinculada.
+function facturaDeIngreso(ing){
+  if(!ing || ing.fuenteId==null) return null;
+  const directa = S.cuentasCobrar.find(c=>c.id===ing.fuenteId);
+  if(directa) return directa;
+  for(const c of S.cuentasCobrar){
+    if((c.pagos||[]).some(p=>p.id===ing.fuenteId)) return c;
+  }
+  return null;
+}
+
 // Crea un registro liviano de CxC para una factura anulada — deja rastro del NCF, fecha
 // y cliente, pero en RD$0.00 y sin afectar Ingresos ni Balance. Así, la próxima factura
 // de la secuencia ya no vuelve a preguntar por este número.
@@ -5329,7 +5356,8 @@ function renderBalanceGeneral(){
   const historicoIngresosNeto = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.itbis||0),0);
   const historicoEgresosNeto = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
   const efectivoNoBancarizado = historicoIngresosNeto - historicoEgresosNeto;
-  const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos + efectivoNoBancarizado;
+  // (totalActivos se termina de calcular más abajo, después de creditoFiscalAFavor —
+  // ese Activo depende de datos de Egresos y CxC que se procesan en la sección de Pasivos.)
 
   // ── PASIVOS ──
   let cxpTotal=0;
@@ -5337,18 +5365,38 @@ function renderBalanceGeneral(){
     S.cuentasPagar[section].forEach(item=>{ if(item.estado!=='pagada') cxpTotal += cxpPending(item); });
   });
   S.cuentasPagar.prestamos.forEach(item=>{ if(item.estado!=='pagada') cxpTotal += parseFloat(item.saldo)||0; }); // saldo real de capital, no la cuota
-  const itbisCobradoHistorico = S.ingresos.reduce((s,x)=>s+(x.itbis||0),0);
+  // El ITBIS se causa (se le debe a la DGII) el mes en que se EMITE la factura — no cuando el
+  // cliente la paga (así lo exige la DGII), y no tiene relación con la fecha de cobro. Por eso
+  // esto se calcula directamente sobre las facturas de CxC (cobradas O pendientes) emitidas
+  // desde el 27-ago-2026 — nunca sobre los Ingresos ya cobrados. Las facturas emitidas ANTES de
+  // esa fecha (históricas, o ya cobradas dentro de la V2.0 pero facturadas en la V1) ya
+  // resolvieron su ITBIS en su momento y jamás vuelven a contar aquí, sin importar cuándo se
+  // termine de cobrar el dinero.
+  const itbisDirectasPostApertura = S.ingresos.filter(x=>!x.esHistorico && !facturaDeIngreso(x)).reduce((s,x)=>s+(x.itbis||0),0);
+  const itbisCxcPostApertura = S.cuentasCobrar.filter(c=>(c.issued||'')>=CUTOVER_V2).reduce((s,c)=>s+(c.itbis||0),0);
+  const itbisCausado = itbisDirectasPostApertura + itbisCxcPostApertura;
   // Dos cosas distintas que ambas reducen lo que le debes a la DGII:
   // 1) Crédito fiscal — el ITBIS que TÚ pagaste en tus propias compras (egresos con ITBIS
   //    marcado, que no sean la remisión misma a la DGII).
   // 2) Remisiones ya pagadas — el efectivo que ya le mandaste directo a la DGII.
   const itbisCreditoFiscal = S.egresos.filter(x=>x.categoria!=='itbis').reduce((s,x)=>s+(x.itbis||0),0);
   const itbisRemesasPagadas = S.egresos.filter(x=>x.categoria==='itbis').reduce((s,x)=>s+x.monto,0);
-  const itbisPagadoHistorico = itbisCreditoFiscal + itbisRemesasPagadas;
-  const itbisPorPagar = Math.max(0, itbisCobradoHistorico - itbisPagadoHistorico);
+  const itbisPagado = itbisCreditoFiscal + itbisRemesasPagadas;
+  const itbisPorPagar = Math.max(0, itbisCausado - itbisPagado);
+  // Cuando lo que has pagado en ITBIS de tus compras es MÁS que el ITBIS que has causado en tus
+  // ventas de la V2.0 (por ejemplo, todavía no has facturado nada nuevo con ITBIS), ese exceso
+  // no se pierde — se convierte en un crédito a tu favor ante la DGII, que se va aplicando en
+  // cuanto empieces a causar ITBIS en ventas nuevas.
+  const creditoFiscalAFavor = Math.max(0, itbisPagado - itbisCausado);
+  const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos + efectivoNoBancarizado + creditoFiscalAFavor;
   const limitRD = S.creditCard.creditLimit||0;
   const tarjetaAdeudado = Math.max(0, limitRD - ccEffectiveAvail());
-  const totalPasivos = cxpTotal + itbisPorPagar + tarjetaAdeudado;
+  // Ingresos Diferidos: mientras una factura de CxC siga pendiente de cobro, su parte neta
+  // (sin ITBIS) todavía no es "utilidad" tuya bajo base efectivo — es un Pasivo temporal que
+  // compensa el Activo de la Cuenta por Cobrar, y se cancela solo, automáticamente, en cuanto
+  // cobres la factura (en ese momento nace el Ingreso real que la reemplaza).
+  const ingresosDiferidos = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).reduce((s,x)=>s+(x.subtotal||0),0);
+  const totalPasivos = cxpTotal + itbisPorPagar + tarjetaAdeudado + ingresosDiferidos;
 
   // ── CAPITAL ──
   const saldosInicialesCuentas = S.accounts.reduce((s,acc)=>s+(acc.initialBalance||0),0);
@@ -5373,7 +5421,10 @@ function renderBalanceGeneral(){
   // Pagos), esa deuda de apertura sube el Pasivo pero nada en el Capital la compensaba — se
   // trata igual que la deuda de apertura de los préstamos.
   const tarjetaAperturaAdeudo = Math.max(0, limitRD - (S.creditCard.initAvailRD ?? S.creditCard.availableRD ?? 0));
-  const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD - tarjetaAperturaAdeudo; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte, menos deuda (préstamos y tarjeta) que ya existía en ese momento
+  // Capital de Apertura — Transición V1→V2.0: ver el comentario junto a S.capitalAperturaTransicion
+  // en defaultState(). Es un valor FIJO, calculado una sola vez — nunca se recalcula aquí.
+  const capitalAperturaTransicion = S.capitalAperturaTransicion||0;
+  const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD - tarjetaAperturaAdeudo + capitalAperturaTransicion; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte + transición V1→V2.0, menos deuda (préstamos y tarjeta) que ya existía en ese momento
   const ingresosNetosHistoricos = S.ingresos.reduce((s,x)=>s+x.monto-( x.itbis||0),0);
   // El ITBIS que pagas en tus COMPRAS (crédito fiscal) no es un gasto real tuyo — ya lo estás
   // recuperando reduciendo lo que le debes a la DGII (ver itbisCreditoFiscal arriba). Antes se
@@ -5396,19 +5447,21 @@ function renderBalanceGeneral(){
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1030 Inventario/Materiales</span><span class="td-mono">${fmt(inventario)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1040 Maquinaria y Equipo</span><span class="td-mono">${fmt(totalActivosFijos)}</span></div>
       ${efectivoNoBancarizado!==0?`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1050 Efectivo No Bancarizado <span title="Dinero registrado como 'Histórico' — no pasa por ninguna cuenta bancaria del sistema, pero sí sube tu Capital, así que necesita este Activo para que el Balance cuadre." style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(efectivoNoBancarizado)}</span></div>`:''}
+      ${creditoFiscalAFavor!==0?`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>1060 Crédito Fiscal ITBIS a Favor <span title="El ITBIS que has pagado en tus compras supera al que has causado en ventas de la V2.0 — el exceso es un crédito a tu favor ante la DGII." style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(creditoFiscalAFavor)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#4ade80;"><span>TOTAL ACTIVOS</span><span class="td-mono">${fmt(totalActivos)}</span></div>
     </div>
     <div class="add-form" style="margin-bottom:0;">
       <h3 style="color:#ef4444;">PASIVOS</h3>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>2010 Cuentas por Pagar</span><span class="td-mono">${fmt(cxpTotal)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>2020 ITBIS por Pagar <span title="ITBIS Cobrado − Crédito Fiscal (ITBIS de tus compras) − Remesas ya pagadas a la DGII" style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(itbisPorPagar)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>2020 ITBIS por Pagar <span title="ITBIS causado en facturas emitidas desde el 27-ago-2026 (cobradas o pendientes) − Crédito Fiscal (ITBIS de tus compras) − Remesas ya pagadas a la DGII" style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(itbisPorPagar)}</span></div>
+      ${ingresosDiferidos!==0?`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>2025 Ingresos Diferidos <span title="La parte neta (sin ITBIS) de tus Cuentas por Cobrar pendientes — bajo base efectivo, todavía no es utilidad tuya hasta que cobres. Se cancela sola en cuanto cobres cada factura." style="cursor:help;">ⓘ</span></span><span class="td-mono">${fmt(ingresosDiferidos)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>2030 Tarjeta de Crédito por Pagar</span><span class="td-mono">${fmt(tarjetaAdeudado)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#ef4444;"><span>TOTAL PASIVOS</span><span class="td-mono">${fmt(totalPasivos)}</span></div>
     </div>
     <div class="add-form" style="margin-bottom:0;">
       <h3 style="color:#818cf8;">CAPITAL</h3>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3010 Capital del Titular</span><span class="td-mono">${fmt(capitalTitular)}</span></div>
-      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}${tarjetaAperturaAdeudo>0?` − Tarjeta de Apertura: ${fmt(tarjetaAperturaAdeudo)}`:''}</div>
+      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}${tarjetaAperturaAdeudo>0?` − Tarjeta de Apertura: ${fmt(tarjetaAperturaAdeudo)}`:''}${capitalAperturaTransicion!==0?` + ITBIS Recuperado de Transición: ${fmt(capitalAperturaTransicion)}`:''}</div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3020 Utilidades Retenidas</span><span class="td-mono">${fmt(utilidadesRetenidas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3030 Distribuciones (−)</span><span class="td-mono negative">−${fmt(distribucionesHistoricas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#818cf8;"><span>TOTAL CAPITAL</span><span class="td-mono">${fmt(totalCapital)}</span></div>
@@ -5420,14 +5473,22 @@ function renderBalanceGeneral(){
   // algo que ni siquiera existe en tu sistema.
   const hayHistoricos = S.ingresos.some(x=>x.esHistorico) || S.egresos.some(x=>x.esHistorico);
   const hayCorteBalance = ajustesDeCorte !== 0;
+  // Mientras una factura de CxC siga pendiente de cobro, su parte NETA ya está cubierta por
+  // "Ingresos Diferidos" (arriba) — lo único que de verdad queda sin resolver, a propósito, es
+  // el ITBIS que esa factura trae embebido (cxcPendiente es bruto, ingresosDiferidos es neto).
+  const itbisFacturasPendientes = cxcPendiente - ingresosDiferidos;
   let msgDiferencia = '';
+  let esTemporal = false; // true = causa conocida y esperable (ámbar) — false = de verdad no cuadra (rojo)
   if(!cuadra){
-    if(Math.abs(diferencia - cxcPendiente) < 1){
-      msgDiferencia = `esto coincide con tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) — es normal y temporal: el sistema reconoce el Ingreso real solo cuando cobras, no cuando facturas. Se corrige solo en cuanto cobres esas facturas.`;
+    if(Math.abs(diferencia - itbisFacturasPendientes) < 1){
+      esTemporal = true;
+      msgDiferencia = `esto coincide con el <strong>ITBIS de tus facturas pendientes de cobro</strong> (${fmt(itbisFacturasPendientes)}) — es normal y temporal: ese ITBIS ya se lo debes a la DGII desde que emitiste la factura, pero solo lo recuperas cuando el cliente te paga. Se corrige solo en cuanto cobres esas facturas.`;
     } else if(Math.abs(diferencia + cxpTotal) < 1){
+      esTemporal = true;
       msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
-    } else if(Math.abs(diferencia - (cxcPendiente - cxpTotal)) < 1){
-      msgDiferencia = `esto coincide con la combinación de tu <strong>CxC pendiente de cobro</strong> (${fmt(cxcPendiente)}) y tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — ambas son normales y temporales, se corrigen solas en cuanto cobres/pagues esas cuentas.`;
+    } else if(Math.abs(diferencia - (itbisFacturasPendientes - cxpTotal)) < 1){
+      esTemporal = true;
+      msgDiferencia = `esto coincide con la combinación del <strong>ITBIS de tus facturas pendientes de cobro</strong> (${fmt(itbisFacturasPendientes)}) y tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — ambas son normales y temporales, se corrigen solas en cuanto cobres/pagues esas cuentas.`;
     } else {
       // No coincidió con ninguna causa conocida y esperable — se arma la lista SOLO con lo que
       // de verdad existe en tus datos, en vez de una lista genérica fija.
@@ -5435,11 +5496,13 @@ function renderBalanceGeneral(){
       if(hayCorteBalance) posibles.push('los ajustes de "Corte de Balance" que sí tienes registrados');
       if(hayHistoricos) posibles.push('movimientos marcados como "Histórico" que sí tienes registrados');
       posibles.push('los montos de Activos Fijos (verifica que estén escritos correctamente)');
-      msgDiferencia = `no coincide con ninguna causa esperable automática (CxC/CxP pendientes) — revisa ${posibles.join(', ')}. Si no encuentras la causa, dime qué registraste justo antes de ver este mensaje y lo rastreamos juntos.`;
+      msgDiferencia = `no coincide con ninguna causa esperable automática (ITBIS de CxC pendiente, o CxP pendiente) — revisa ${posibles.join(', ')}. Si no encuentras la causa, dime qué registraste justo antes de ver este mensaje y lo rastreamos juntos.`;
     }
   }
   document.getElementById('bg-cuadre').innerHTML = cuadra
     ? `<div style="border:2px solid rgba(74,222,128,.4);border-radius:12px;padding:16px;text-align:center;color:#4ade80;font-weight:600;">✅ El Balance cuadra — Activos = Pasivos + Capital</div>`
+    : esTemporal
+    ? `<div style="border:2px solid rgba(253,201,1,.4);border-radius:12px;padding:16px;text-align:center;color:#fdc901;font-weight:600;">🟡 Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>`
     : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>`;
 
   // Índice de Solvencia = Activos Totales ÷ Pasivos Totales — >1 significa que tienes más de lo
@@ -5922,6 +5985,37 @@ function diagnosticarCuentaPorCuenta(){
   } else {
     icgAlert(`Se encontró diferencia REAL (después de excluir transferencias) en ${conDiferencia.length} cuenta(s):<br><br>${detalle}<br><br>Revisa el historial de movimientos de la(s) cuenta(s) marcada(s) con ⚠️ — ahí debería estar el origen exacto.`,'⚠️ Diferencia Encontrada por Cuenta');
   }
+}
+// Reparación única: dinero que salió realmente de una cuenta bancaria (egreso o impuesto)
+// pero que nunca generó su Egreso formal correspondiente — invisible para el Estado de
+// Resultados y para Utilidades Retenidas, aunque el banco ya lo refleje correctamente. Se
+// crea con categoría en blanco a propósito — usa el botón 🏷️ en Egresos para clasificarlo.
+function repararEgresosFaltantesCaja(){
+  const encontrados=[];
+  S.accounts.forEach((acc,idx)=>{
+    (acc.transactions||[]).forEach(t=>{
+      if(t.esTransferenciaInterna) return;
+      if(t.type!=='egreso' && t.type!=='impuesto') return;
+      const yaExiste = S.egresos.some(e=>e.cuentaIdx===idx && e.fecha===t.date && Math.abs(e.monto-t.amount)<0.01 && !e.esHistorico);
+      if(!yaExiste) encontrados.push({acc,idx,t});
+    });
+  });
+  if(!encontrados.length){
+    icgAlert('No se encontró ningún movimiento bancario sin su Egreso formal correspondiente. Todo está correcto.','Sin Egresos Faltantes');
+    return;
+  }
+  const detalle = encontrados.map(({acc,t})=>`• ${fmtDate(t.date)} — ${esc(acc.name)} — ${fmt(t.amount)} — ${esc(t.desc)}`).join('<br>');
+  icgConfirm(`Se encontraron <strong>${encontrados.length}</strong> movimiento(s) bancario(s) sin su Egreso formal — el dinero salió del banco pero nunca se registró como gasto en el Estado de Resultados:<br><br>${detalle}<br><br>Se crearán con categoría en blanco — usa 🏷️ en Egresos para clasificarlos después.`,'Reparar Egresos Faltantes de Banco','Corregir Todos',false).then(ok=>{
+    if(!ok) return;
+    encontrados.forEach(({idx,t})=>{
+      let suplidorNombre='', desc=t.desc||'';
+      const m = desc.match(/^Egreso:\s*(.*?)\s*–\s*(.*)$/);
+      if(m){ suplidorNombre=m[1]; desc=m[2]; }
+      addEgreso(true,{fecha:t.date,suplidorId:null,suplidorNombre,categoria:'',monto:t.amount,itbis:0,subtotal:t.amount,desc,numFactura:'',metodo:t.method,ref:t.ref||'',cuentaIdx:idx,esHistorico:false,fuente:'manual',fuenteId:null});
+    });
+    save(); renderEgresos(); renderConsolidated();
+    notify('success','Egresos Reparados',`${encontrados.length} egreso(s) creados. Usa 🏷️ en Egresos para asignarles categoría.`);
+  });
 }
 function diagnosticarTransferenciasSinPareja(){
   const sueltas=[];
@@ -10195,6 +10289,10 @@ function ensureEstadoIntegro(){
   if(S.recibosCounter===undefined) S.recibosCounter=0;
   if(!S.recibosEgreso) S.recibosEgreso=[];
   if(S.recibosEgresoCounter===undefined) S.recibosEgresoCounter=0;
+  // Capital de Apertura — Transición V1→V2.0 (ver defaultState() para la explicación completa).
+  // Si el sistema arrancó ANTES de que existiera este campo, se planta aquí una sola vez con
+  // el mismo valor fijo — nunca se recalcula automáticamente después.
+  if(S.capitalAperturaTransicion===undefined) S.capitalAperturaTransicion=19836.00;
   // Categorías reservadas de nómina del titular — deben existir siempre
   [{key:'salario_titular',label:'Salario del Titular (bruto)'},
    {key:'aporte_tss',label:'Aporte Patronal TSS'},
