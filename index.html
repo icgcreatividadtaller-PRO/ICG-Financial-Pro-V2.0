@@ -714,6 +714,24 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
   </div>
 </div>
 
+<!-- ══ GESTIONAR TIPOS DE MATERIAL (subcategoría de Materiales, no crea categorías nuevas) ══ -->
+<div class="modal-overlay" id="gestionarSubcatModal">
+  <div class="modal" style="max-width:440px;border-color:rgba(129,140,248,.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">Tipos de Material</h2>
+      <button class="modal-close" onclick="closeGestionarSubcatMateriales()">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input autocomplete="off" type="text" id="gestionarSubcat-nueva" placeholder="Nombre del nuevo tipo de material..." style="flex:1;height:44px;box-sizing:border-box;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:0 12px;" onkeydown="if(event.key==='Enter')confirmarNuevoSubcatMaterial()">
+      <button class="btn btn-primary" style="white-space:nowrap;" onclick="confirmarNuevoSubcatMaterial()">+ Agregar</button>
+    </div>
+    <div id="gestionarSubcatLista" style="max-height:320px;overflow-y:auto;margin-bottom:16px;text-transform:none;letter-spacing:normal;"></div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="closeGestionarSubcatMateriales()">Aceptar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="notifyModal">
   <div class="modal notify-box" style="max-width:420px;border-width:2px;text-align:center;">
     <div class="notify-icon" style="font-size:40px;margin-bottom:12px;">◎</div>
@@ -1526,7 +1544,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <div class="form-group" style="width:190px;flex-shrink:0;">
         <label>Categoría</label>
         <div style="display:flex;gap:6px;height:44px;">
-          <select id="egr-categoria" style="flex:1;height:44px;box-sizing:border-box;">
+          <select id="egr-categoria" onchange="onEgrCategoriaChange()" style="flex:1;height:44px;box-sizing:border-box;">
             <option value="">— Selecciona —</option>
             <option value="materiales">Materiales & Suministros</option>
             <option value="nomina">Nómina Administrativa</option>
@@ -1548,6 +1566,13 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
             <option value="instalacion">Instalación</option>
           </select>
           <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#ef4444;border-color:rgba(239,68,68,.3);font-size:18px;box-sizing:border-box;" title="Gestionar categorías">✎</button>
+        </div>
+      </div>
+      <div class="form-group" id="egr-subcategoria-wrap" style="width:190px;flex-shrink:0;display:none;">
+        <label>Tipo de Material</label>
+        <div style="display:flex;gap:6px;height:44px;">
+          <select id="egr-subcategoria" style="flex:1;height:44px;box-sizing:border-box;"></select>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarSubcatMateriales()" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Gestionar tipos de material">✎</button>
         </div>
       </div>
       <div class="form-group" style="width:135px;flex-shrink:0;">
@@ -2773,7 +2798,11 @@ function defaultState() {
     // dinero llegó al banco sin ninguna contraparte en Capital — este ajuste se la da, una sola
     // vez, para siempre. No tiene nada que ver con "Ajuste de Corte de Balance" (que es para
     // corregir errores de captura en una cuenta bancaria).
-    capitalAperturaTransicion: 19836.00
+    capitalAperturaTransicion: 19836.00,
+    // Tipos de Material: subcategoría opcional que solo aplica dentro de la categoría "Materiales"
+    // — no crea categorías nuevas (Costo Directo, ITBIS y Balance General no se enteran de esto),
+    // solo añade detalle fino al Historial de Egresos. Editable igual que las categorías.
+    subcategoriasMateriales: ['Sintra','Acrílico','Coroplast','Vinil','Lona','Materiales de Instalación','Papel']
   };
 }
 
@@ -6537,6 +6566,65 @@ function getAllIngFinCats(){
 // código en sí, así que se "ocultan" (se guardan en S.categoriasXOcultas) — si algún día se
 // necesitan de vuelta, se pueden volver a mostrar de la misma forma.
 let _gestionarCatTipo=null;
+// Tipo de Material (subcategoría de "Materiales") — aparece solo cuando la categoría elegida es
+// materiales; se guarda junto al Egreso pero nunca cambia su `categoria`, así que Costo Directo,
+// ITBIS y Balance General siguen viendo exactamente lo mismo que antes.
+function poblarSubcategoriaMateriales(selectId, valorActual){
+  const sel=document.getElementById(selectId);
+  if(!sel) return;
+  sel.innerHTML='<option value="">— Elegir —</option>'+(S.subcategoriasMateriales||[]).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  if(valorActual && sel.querySelector(`option[value="${CSS.escape(valorActual)}"]`)) sel.value=valorActual;
+}
+function onEgrCategoriaChange(){
+  const esMateriales = document.getElementById('egr-categoria').value==='materiales';
+  const wrap=document.getElementById('egr-subcategoria-wrap');
+  if(wrap) wrap.style.display = esMateriales ? '' : 'none';
+  if(esMateriales) poblarSubcategoriaMateriales('egr-subcategoria');
+}
+function openGestionarSubcatMateriales(){
+  renderGestionarSubcatMaterialesLista();
+  document.getElementById('gestionarSubcatModal').classList.add('open');
+}
+function closeGestionarSubcatMateriales(){
+  document.getElementById('gestionarSubcatModal').classList.remove('open');
+}
+function renderGestionarSubcatMaterialesLista(){
+  const items=[...(S.subcategoriasMateriales||[])].sort((a,b)=>a.localeCompare(b,'es'));
+  document.getElementById('gestionarSubcatLista').innerHTML = items.length ? items.map(m=>{
+    const enUso = S.egresos.filter(e=>e.subcategoria===m).length;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-bottom:1px solid var(--border2);">
+      <span style="font-size:15px;color:#c0c6d8;">${esc(m)}${enUso?` <span style="color:#6b7a99;font-size:13px;">(${enUso} registro${enUso===1?'':'s'})</span>`:''}</span>
+      <button class="del-btn" onclick="quitarSubcatMaterial('${escAttr(m)}')" title="Quitar">×</button>
+    </div>`;
+  }).join('') : '<div class="empty-state">Sin tipos de material.</div>';
+}
+function quitarSubcatMaterial(nombre){
+  const enUso = S.egresos.filter(e=>e.subcategoria===nombre).length;
+  const seguir=()=>{
+    S.subcategoriasMateriales=(S.subcategoriasMateriales||[]).filter(m=>m!==nombre);
+    save();
+    renderGestionarSubcatMaterialesLista();
+    onEgrCategoriaChange();
+  };
+  if(enUso>0){
+    icgConfirm(`Este tipo de material está usado en <strong>${enUso}</strong> registro(s) ya guardados. Si lo quitas, esos registros conservan el dato tal cual, solo deja de estar disponible para elegir en registros nuevos.<br><br>¿Continuar?`,'Tipo de Material en Uso','Quitar de Todas Formas',true).then(ok=>{ if(ok) seguir(); });
+  } else {
+    seguir();
+  }
+}
+function confirmarNuevoSubcatMaterial(){
+  const input=document.getElementById('gestionarSubcat-nueva');
+  const nombre=input.value.trim();
+  if(!nombre) return;
+  if((S.subcategoriasMateriales||[]).some(m=>normalizarTexto(m)===normalizarTexto(nombre))){
+    notify('info','Ya existe','Ese tipo de material ya está en la lista.'); return;
+  }
+  S.subcategoriasMateriales=[...(S.subcategoriasMateriales||[]), nombre];
+  save();
+  input.value='';
+  renderGestionarSubcatMaterialesLista();
+  onEgrCategoriaChange();
+}
 function openGestionarCategorias(tipo){
   _gestionarCatTipo=tipo;
   const titulos={ing:'Categorías de Ingresos',egr:'Categorías de Egresos'};
@@ -8079,10 +8167,18 @@ function renderRevisionSuplidor(wrap){
     <p style="font-size:15px;color:#8899bb;margin-bottom:14px;">${supMatch?`Suplidor detectado: <strong style="color:#818cf8;">${esc(supMatch.nombre)}</strong>`:'No se detectó un suplidor conocido — puedes elegirlo abajo.'}</p>
     <div class="form-grid">
       <div class="form-group" style="grid-column:span 2;"><label>Suplidor</label>
-        <select id="comp-sup-select">
+        <select id="comp-sup-select" onchange="onCompSupSelectChange()">
           <option value="">— Seleccionar —</option>
+          <option value="__nuevo__">+ Crear Nuevo Suplidor...</option>
           ${[...S.suplidores].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(s=>`<option value="${s.id}" ${supMatch&&supMatch.id===s.id?'selected':''}>${esc(s.nombre)}</option>`).join('')}
         </select>
+      </div>
+      <div class="form-group" id="comp-sup-nuevo-wrap" style="grid-column:span 2;display:none;">
+        <label>Nombre del Nuevo Suplidor</label>
+        <div style="display:flex;gap:8px;">
+          <input autocomplete="off" type="text" id="comp-sup-nuevo-nombre" placeholder="Nombre..." style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();guardarSuplidorInlineComprobante();}">
+          <button type="button" class="btn btn-primary" style="white-space:nowrap;" onclick="guardarSuplidorInlineComprobante()">Guardar</button>
+        </div>
       </div>
       <div class="form-group" style="grid-column:span 2;"><label>Factura / CxP a aplicar</label>
         <select id="comp-sup-invoice" onchange="onCompSupInvoiceChange()">
@@ -8091,7 +8187,10 @@ function renderRevisionSuplidor(wrap){
         </select>
       </div>
       <div class="form-group" id="comp-sup-cat-wrap" style="grid-column:span 2;"><label>Categoría <span style="font-weight:400;color:#6b7a99;">(solo si es Egreso suelto)</span></label>
-        <select id="comp-sup-categoria"><option value="">— Elegir —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select>
+        <select id="comp-sup-categoria" onchange="onCompSupCategoriaChange()"><option value="">— Elegir —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select>
+      </div>
+      <div class="form-group" id="comp-sup-subcat-wrap" style="grid-column:span 2;display:none;"><label>Tipo de Material</label>
+        <select id="comp-sup-subcategoria"></select>
       </div>
       <div class="form-group" style="grid-column:span 2;"><label>Cuenta Bancaria <span style="font-weight:400;color:#6b7a99;">de donde salió el dinero</span></label>
         <select id="comp-sup-cuenta">${S.accounts.map((a,i)=>`<option value="${i}" ${i===(supBancoIdx??0)?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
@@ -8108,10 +8207,53 @@ function renderRevisionSuplidor(wrap){
 
 function onCompSupInvoiceChange(){/* placeholder para futura sincronización visual */}
 
+// Permite crear un suplidor nuevo sin salir de "Cargar Comprobante" — antes había que cancelar,
+// ir a Suplidores, crearlo ahí, y volver a empezar todo el proceso de carga.
+function onCompSupSelectChange(){
+  const sel=document.getElementById('comp-sup-select');
+  const wrap=document.getElementById('comp-sup-nuevo-wrap');
+  if(!sel||!wrap) return;
+  if(sel.value==='__nuevo__'){
+    wrap.style.display='';
+    setTimeout(()=>document.getElementById('comp-sup-nuevo-nombre')?.focus(),50);
+  } else {
+    wrap.style.display='none';
+  }
+}
+function guardarSuplidorInlineComprobante(){
+  const input=document.getElementById('comp-sup-nuevo-nombre');
+  const nombre=input.value.trim();
+  if(!nombre){ notify('error','Campo Requerido','Escribe el nombre del suplidor.'); return; }
+  if(esNombreDeMetodoDePago(nombre)){ notify('error','Nombre No Válido',`"${nombre}" es una forma de pago, no un suplidor.`); return; }
+  if(S.suplidores.some(s=>normalizarTexto(s.nombre)===normalizarTexto(nombre))){ notify('info','Ya Existe','Ya hay un suplidor con ese nombre — selecciónalo de la lista.'); return; }
+  const nuevo={id:Date.now(),nombre,rnc:'',categoria:'materiales',email:'',tel:'',dir:''};
+  S.suplidores.push(nuevo);
+  save();
+  renderSuplidores();
+  const sel=document.getElementById('comp-sup-select');
+  const opt=document.createElement('option');
+  opt.value=nuevo.id; opt.textContent=nuevo.nombre;
+  sel.appendChild(opt);
+  sel.value=nuevo.id;
+  document.getElementById('comp-sup-nuevo-wrap').style.display='none';
+  input.value='';
+  notify('success','Suplidor Creado',`"${nombre}" se agregó y ya está seleccionado.`);
+}
+// Igual que en Registrar Egreso: el Tipo de Material solo aplica dentro de "Materiales" y no
+// cambia la categoría contable — es solo un detalle adicional guardado junto al Egreso.
+function onCompSupCategoriaChange(){
+  const esMateriales=document.getElementById('comp-sup-categoria').value==='materiales';
+  const wrap=document.getElementById('comp-sup-subcat-wrap');
+  if(wrap) wrap.style.display=esMateriales?'':'none';
+  if(esMateriales) poblarSubcategoriaMateriales('comp-sup-subcategoria');
+}
+
 function confirmarComprobanteSuplidor(){
   const invoiceId=document.getElementById('comp-sup-invoice').value;
   const suplidorId=document.getElementById('comp-sup-select').value;
+  if(suplidorId==='__nuevo__'){ notify('error','Suplidor sin Guardar','Presiona "Guardar" para crear el nuevo suplidor antes de continuar.'); return; }
   const categoria=document.getElementById('comp-sup-categoria')?.value||'';
+  const subcategoria=categoria==='materiales'?(document.getElementById('comp-sup-subcategoria')?.value||''):'';
   const desc=document.getElementById('comp-sup-desc')?.value.trim()||'';
   const monto=numVal('comp-sup-amount')||0;
   const fecha=document.getElementById('comp-sup-date').value;
@@ -8141,6 +8283,8 @@ function confirmarComprobanteSuplidor(){
     refreshEgresoSelects();
     if(suplidorId) document.getElementById('egr-suplidor').value=suplidorId;
     document.getElementById('egr-categoria').value=categoria;
+    onEgrCategoriaChange();
+    if(subcategoria) document.getElementById('egr-subcategoria').value=subcategoria;
     document.getElementById('egr-desc').value=desc||(suplidor?.nombre||'');
     setMontoValue('egr-monto',monto);
     document.getElementById('egr-metodo').value='transferencia';
@@ -8342,6 +8486,7 @@ function addEgreso(auto=false,data={}){
   const fecha=auto?data.fecha:document.getElementById('egr-fecha').value;
   const suplidorId=auto?data.suplidorId:parseInt(document.getElementById('egr-suplidor').value)||null;
   const cat=auto?data.categoria:document.getElementById('egr-categoria').value;
+  const subcategoria=auto?(data.subcategoria||''):(cat==='materiales'?(document.getElementById('egr-subcategoria')?.value||''):'');
   const monto=auto?data.monto:numVal('egr-monto')||0;
   const itbis=auto?(data.itbis||0):(numVal('egr-itbis')||0);
   const subtotal=auto?(data.subtotal||0):(numVal('egr-subtotal')||0);
@@ -8359,7 +8504,7 @@ function addEgreso(auto=false,data={}){
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
     const egresoId=Date.now()+Math.random();
-    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null});
+    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null});
     S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(esHistorico){
@@ -8391,6 +8536,7 @@ function addEgreso(auto=false,data={}){
       document.getElementById('egr-desc').value='';
       document.getElementById('egr-numfactura').value='';
       document.getElementById('egr-categoria').selectedIndex=0;
+      document.getElementById('egr-subcategoria-wrap').style.display='none';
       document.getElementById('egr-ref').value='';
       // "Cuenta Bancaria" NUNCA se reseteaba — si alguna vez elegías "Histórico" para un solo
       // egreso, ese valor se quedaba pegado ahí para todos los siguientes, sin que se notara.
@@ -8608,9 +8754,10 @@ function renderEgresos(){
   document.getElementById('egr-tbody').innerHTML=items.length?items.map(x=>{
     const acct=x.esHistorico?'📋 Histórico':(S.accounts[x.cuentaIdx]?.name||'—');
     const egrCatLabel = ({...EGR_CAT_LABELS,cxp:'Pago CxP',...Object.fromEntries((S.categoriasEgresos||[]).map(c=>[c.key,c.label]))})[x.categoria]||x.categoria||'—';
+    const egrCatLabelConSubcat = x.subcategoria ? `${esc(egrCatLabel)} — ${esc(x.subcategoria)}` : esc(egrCatLabel);
     const egrDesc = x.desc ? x.desc.replace(/^Egreso:\s*[^–]*–\s*/,'').trim()||x.desc : '—';
     const egrDescConFactura = x.numFactura ? `<strong style="color:#8899bb;">Fact. ${esc(x.numFactura)}</strong>${egrDesc!=='—'?' – '+esc(egrDesc):''}` : esc(egrDesc);
-    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(egrCatLabel)}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
+    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${egrCatLabelConSubcat}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="10"><div class="empty-state">Sin egresos que coincidan con la búsqueda.</div></td></tr>`;
 }
 
@@ -10359,6 +10506,7 @@ function ensureEstadoIntegro(){
   // Si el sistema arrancó ANTES de que existiera este campo, se planta aquí una sola vez con
   // el mismo valor fijo — nunca se recalcula automáticamente después.
   if(S.capitalAperturaTransicion===undefined) S.capitalAperturaTransicion=19836.00;
+  if(!S.subcategoriasMateriales) S.subcategoriasMateriales=['Sintra','Acrílico','Coroplast','Vinil','Lona','Materiales de Instalación','Papel'];
   // Categorías reservadas de nómina del titular — deben existir siempre
   [{key:'salario_titular',label:'Salario del Titular (bruto)'},
    {key:'aporte_tss',label:'Aporte Patronal TSS'},
