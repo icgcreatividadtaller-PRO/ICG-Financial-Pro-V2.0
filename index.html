@@ -703,10 +703,13 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <h2 id="gestionarCatTitulo" style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">Gestionar Categorías</h2>
       <button class="modal-close" onclick="closeGestionarCategorias()">✕</button>
     </div>
-    <div id="gestionarCatLista" style="max-height:320px;overflow-y:auto;margin-bottom:16px;"></div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
       <input autocomplete="off" type="text" id="gestionarCat-nueva" placeholder="Nombre de la nueva categoría..." style="flex:1;height:44px;box-sizing:border-box;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);padding:0 12px;" onkeydown="if(event.key==='Enter')confirmarNuevaCategoria()">
       <button class="btn btn-primary" style="white-space:nowrap;" onclick="confirmarNuevaCategoria()">+ Agregar</button>
+    </div>
+    <div id="gestionarCatLista" style="max-height:320px;overflow-y:auto;margin-bottom:16px;text-transform:none;letter-spacing:normal;"></div>
+    <div style="display:flex;justify-content:flex-end;">
+      <button class="btn btn-primary" onclick="closeGestionarCategorias()">Aceptar</button>
     </div>
   </div>
 </div>
@@ -1943,6 +1946,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararTransferenciasInternas()">🔧 Reparar Transferencias Internas</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="revisarHistoricosSinQuerer()">🔧 Revisar "Históricos" Sin Querer</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="repararEgresosFaltantesCaja()">🔧 Reparar Egresos Faltantes de Caja</button>
+      <button class="btn btn-secondary" style="font-size:13px;background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.4);color:#ef4444;" onclick="eliminarFacturasPreApertura()">🗑️ Eliminar Facturas de Antes de la V2.0</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarTransferenciasSinPareja()">🔍 Diagnosticar Transferencias Sin Pareja</button>
       <button class="btn btn-secondary" style="font-size:13px;" onclick="diagnosticarCuentaPorCuenta()">🔍 Diagnosticar Cuenta por Cuenta</button>
       <button class="btn btn-secondary" style="font-size:13px;background:rgba(253,201,1,.1);border-color:rgba(253,201,1,.4);color:#fdc901;" onclick="verificacionMaestra()">🔍 Verificación Maestra</button>
@@ -2955,6 +2959,7 @@ function toggleTipoVenta(section, id){
 // ══════════════════ INIT ══════════════════
 function init(){
   ensureEstadoIntegro();
+  instalarAutoFitBcards();
   // El marco decorativo "HUD" (desenfoque animado, flote, barrido de luz) se estaba aplicando
   // a TODOS los modales del sistema — 3-4 animaciones infinitas encendiéndose de golpe cada vez
   // que abrías cualquier ventana, incluso las que usas todo el día (Registrar Pago, Gestionar
@@ -4544,6 +4549,40 @@ function initPrivacyModule(key, containerEl, btnEl){
     });
   }
 }
+// ══════════════════ AUTO-AJUSTE DE TAMAÑO — números que no caben en una tarjeta ══════════════════
+// ".bcard-value" tiene un tamaño de letra fijo (30px); un monto largo (ej. RD$645,407.73) se
+// corta contra el borde de la tarjeta porque ésta tiene overflow:hidden. En vez de tocar cada
+// función de render (son más de 90 usos en todo el sistema), un solo observer global vigila
+// TODO el documento y, cada vez que aparece o cambia un ".bcard-value", le ajusta el tamaño de
+// letra según cuántos caracteres tenga — así nunca se corta, sin importar el módulo.
+function autoFitBcardValue(el){
+  const len = (el.textContent||'').trim().length;
+  let size = 30;
+  if(len>18) size=14;
+  else if(len>14) size=17;
+  else if(len>11) size=20;
+  else if(len>8) size=24;
+  if(el.style.fontSize !== size+'px') el.style.fontSize = size+'px';
+}
+function instalarAutoFitBcards(){
+  if(window._bcardAutoFitInstalado) return;
+  window._bcardAutoFitInstalado = true;
+  document.querySelectorAll('.bcard-value').forEach(autoFitBcardValue);
+  new MutationObserver(muts=>{
+    const vistos = new Set();
+    muts.forEach(m=>{
+      if(m.target && m.target.classList && m.target.classList.contains('bcard-value')){
+        vistos.add(m.target.nodeType===1?m.target:m.target.parentElement);
+      }
+      m.addedNodes && m.addedNodes.forEach(n=>{
+        if(n.nodeType!==1) return;
+        if(n.classList && n.classList.contains('bcard-value')) vistos.add(n);
+        n.querySelectorAll && n.querySelectorAll('.bcard-value').forEach(el=>vistos.add(el));
+      });
+    });
+    vistos.forEach(el=>{ if(el) autoFitBcardValue(el); });
+  }).observe(document.body, {childList:true, characterData:true, subtree:true});
+}
 // Engancha el botón de privacidad a TODOS los grupos ".balance-cards" que todavía no lo tengan —
 // segura de llamar repetidas veces (por ejemplo, después de que un módulo reconstruye sus
 // tarjetas por completo) porque solo agrega el botón si de verdad falta.
@@ -6015,6 +6054,33 @@ function repararEgresosFaltantesCaja(){
     });
     save(); renderEgresos(); renderConsolidated();
     notify('success','Egresos Reparados',`${encontrados.length} egreso(s) creados. Usa 🏷️ en Egresos para asignarles categoría.`);
+  });
+}
+// Eliminación única, a petición del usuario: purga las facturas de CxC de "antes de la V2.0"
+// que NUNCA tocaron un banco real dentro de este sistema (payMethod histórico, o cobradas antes
+// del 27-ago-2026 aunque digan "transferencia"), junto con sus Ingresos vinculados — para dejar
+// el histórico de Rentabilidad limpio, comparando solo ingresos y costos de la misma época.
+// Se CONSERVAN intactas: (a) cualquier CxC todavía pendiente de cobro, sin importar su fecha, y
+// (b) cualquier CxC cobrada DESDE el 27-ago-2026 — ese dinero sí generó un depósito real en un
+// banco dentro de la V2.0 (ej. las 8 facturas de Antillana cobradas el 02-sep-2026).
+function eliminarFacturasPreApertura(){
+  const aBorrar = S.cuentasCobrar.filter(c=>cxcEstaResuelta(c) && (c.paidDate||'') < CUTOVER_V2);
+  if(!aBorrar.length){
+    icgAlert('No se encontró ninguna factura de CxC cobrada antes del 27-ago-2026. No hay nada que eliminar.','Sin Facturas Pre-Apertura');
+    return;
+  }
+  const idsABorrar = new Set(aBorrar.map(c=>c.id));
+  const ingresosABorrar = S.ingresos.filter(i=>i.esHistorico && facturaDeIngreso(i) && idsABorrar.has(facturaDeIngreso(i).id));
+  const aConservar = S.cuentasCobrar.filter(c=>cxcEstaResuelta(c) && (c.paidDate||'') >= CUTOVER_V2);
+  const detalleBorrar = aBorrar.map(c=>`• ${esc(c.invoice)} — ${esc(c.client)} — ${fmt(c.amount)} — emitida ${fmtDate(c.issued)}, cobrada ${fmtDate(c.paidDate)}`).join('<br>');
+  const detalleConservar = aConservar.length ? `<br><br><strong>Se conservan intactas (${aConservar.length}, cobradas desde el 27-ago-2026 con dinero real en banco):</strong><br>` + aConservar.map(c=>`• ${esc(c.invoice)} — ${esc(c.client)} — ${fmt(c.amount)}`).join('<br>') : '';
+  icgConfirm(`Se eliminarán <strong>${aBorrar.length}</strong> factura(s) de CxC de antes de la V2.0 y sus <strong>${ingresosABorrar.length}</strong> Ingreso(s) "Histórico" vinculado(s) — esta acción NO se puede deshacer:<br><br>${detalleBorrar}${detalleConservar}<br><br>Las 3 facturas todavía pendientes de cobro no se tocan.`,'Eliminar Facturas de Antes de la V2.0','Eliminar Definitivamente',true).then(ok=>{
+    if(!ok) return;
+    const idsIngresosABorrar = new Set(ingresosABorrar.map(i=>i.id));
+    S.cuentasCobrar = S.cuentasCobrar.filter(c=>!idsABorrar.has(c.id));
+    S.ingresos = S.ingresos.filter(i=>!idsIngresosABorrar.has(i.id));
+    save(); renderCXC(); renderIngresos(); renderBalanceGeneral(); renderRentabilidad(); renderConsolidated();
+    notify('success','Facturas Eliminadas',`${aBorrar.length} factura(s) y ${ingresosABorrar.length} ingreso(s) histórico(s) eliminados. Las 8 facturas de Antillana y las 3 pendientes quedaron intactas.`);
   });
 }
 function diagnosticarTransferenciasSinPareja(){
