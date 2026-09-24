@@ -1538,7 +1538,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Beneficiario</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="egr-suplidor" style="flex:1;min-width:0;height:44px;box-sizing:border-box;"><option value="">— Seleccionar suplidor —</option></select>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openQuickBeneficiario()" style="height:44px;padding:0 12px;white-space:nowrap;border-color:rgba(129,140,248,.3);color:#818cf8;flex-shrink:0;box-sizing:border-box;">+ Nuevo</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openSuplidorModal(null,'egr-suplidor')" style="height:44px;padding:0 12px;white-space:nowrap;border-color:rgba(129,140,248,.3);color:#818cf8;flex-shrink:0;box-sizing:border-box;">+ Nuevo</button>
         </div>
       </div>
       <div class="form-group" style="width:190px;flex-shrink:0;">
@@ -1691,7 +1691,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <label>Beneficiario</label>
         <div style="display:flex;gap:6px;height:44px;">
           <select id="recegr-suplidor" style="flex:1;min-width:0;font-size:15px;height:44px;box-sizing:border-box;"><option value="">— Seleccionar suplidor —</option></select>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="openQuickBeneficiario()" style="height:44px;padding:0 12px;white-space:nowrap;border-color:rgba(129,140,248,.3);color:#818cf8;flex-shrink:0;box-sizing:border-box;">+ Nuevo</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="openSuplidorModal(null,'recegr-suplidor')" style="height:44px;padding:0 12px;white-space:nowrap;border-color:rgba(129,140,248,.3);color:#818cf8;flex-shrink:0;box-sizing:border-box;">+ Nuevo</button>
         </div>
       </div>
       <div class="form-group" style="flex:1;min-width:200px;">
@@ -2341,7 +2341,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 <!-- ══ SUPLIDOR MODAL ══ -->
 <div class="modal-overlay" id="suplidorModal">
   <div class="modal" style="max-width:480px;border:1px solid rgba(79,70,229,.4);">
-    <button class="modal-close" onclick="closeModal('suplidorModal')">×</button>
+    <button class="modal-close" onclick="closeSuplidorModal()">×</button>
     <h2 style="color:#4f46e5;font-size:26px;">Suplidor</h2>
     <div class="form-grid" style="gap:14px;">
       <div class="form-group" style="grid-column:span 2;"><label>Nombre / Razón Social *</label><input autocomplete="off" type="text" id="sup-nombre" placeholder="Nombre del suplidor..."></div>
@@ -2363,7 +2363,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     </div>
     <div style="display:flex;gap:10px;margin-top:18px;">
       <button class="btn" style="background:#4f46e5;color:#1a0800;font-weight:600;flex:1;" onclick="saveSuplidor()">Guardar</button>
-      <button class="btn btn-secondary" onclick="closeModal('suplidorModal')">Cancelar</button>
+      <button class="btn btn-secondary" onclick="closeSuplidorModal()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -2451,25 +2451,6 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <div style="display:flex;gap:10px;margin-top:18px;">
       <button class="btn btn-indigo" style="flex:1;min-width:0;white-space:normal;text-align:center;" onclick="saveQuickCliente()">Guardar y Seleccionar</button>
       <button class="btn btn-ghost" onclick="closeModal('quickClienteModal')">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══ QUICK CREATE BENEFICIARIO (desde Egresos) ══ -->
-<div class="modal-overlay" id="quickBeneficiarioModal">
-  <div class="modal" style="max-width:420px;border-color:rgba(129,140,248,.3);">
-    <button class="modal-close" onclick="closeModal('quickBeneficiarioModal')">×</button>
-    <h2 style="color:#818cf8;font-size:17px;letter-spacing:.05em;text-transform:uppercase;">Nuevo Beneficiario</h2>
-    <p style="color:#8899bb;font-weight:400;font-size:15px;margin-bottom:18px;">Se agregará al directorio y quedará seleccionado en el formulario.</p>
-    <div class="form-grid" style="gap:12px;">
-      <div class="form-group" style="grid-column:span 2;"><label>Nombre / Razón Social *</label><input autocomplete="off" type="text" id="qb-nombre" placeholder="Nombre del beneficiario..."></div>
-      <div class="form-group"><label>RNC / Cédula</label><input autocomplete="off" type="text" id="qb-rnc" placeholder="000-0000000-0"></div>
-      <div class="form-group"><label>Teléfono</label><input autocomplete="off" type="text" id="qb-tel" placeholder="(809) 000-0000"></div>
-      <div class="form-group" style="grid-column:span 2;"><label>Email</label><input autocomplete="off" type="email" id="qb-email" placeholder="correo@beneficiario.com"></div>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:18px;">
-      <button class="btn btn-indigo" style="flex:1;min-width:0;white-space:normal;text-align:center;" onclick="saveQuickBeneficiario()">Guardar y Seleccionar</button>
-      <button class="btn btn-ghost" onclick="closeModal('quickBeneficiarioModal')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -6505,8 +6486,13 @@ function importCxCClient(nombre){
 
 // ══════════════════ SUPLIDORES ══════════════════
 let _editingSuplidorId=null;
-function openSuplidorModal(id=null){
+// Cuando se abre este modal desde OTRO formulario (Registrar Egreso, Recibos de Egreso, Cargar
+// Comprobante) en vez de desde la pestaña Suplidores, aquí se guarda el id del <select> al que
+// hay que devolver — automáticamente seleccionado — el suplidor recién creado.
+let _suplidorModalReturnTo=null;
+function openSuplidorModal(id=null, returnToSelectId=null){
   _editingSuplidorId=id;const s=id?S.suplidores.find(x=>x.id===id):{};
+  _suplidorModalReturnTo=returnToSelectId;
   ['nombre','rnc','email','tel','dir'].forEach(f=>{const el=document.getElementById(`sup-${f}`);if(el)el.value=s?.[f]||'';});
   const catSel=document.getElementById('sup-categoria');
   // Vuelve a poner las opciones base + las personalizadas ya creadas, sin duplicar si se abre varias veces
@@ -6518,16 +6504,37 @@ function openSuplidorModal(id=null){
     }
   });
   catSel.value=s?.categoria||'materiales';
+  // z-index elevado: este modal puede abrirse ENCIMA de otro (ej. desde Cargar Comprobante),
+  // así que siempre debe pintarse por encima, sin importar el orden en el HTML.
+  document.getElementById('suplidorModal').style.zIndex='200';
   document.getElementById('suplidorModal').classList.add('open');
+}
+function closeSuplidorModal(){
+  closeModal('suplidorModal');
+  document.getElementById('suplidorModal').style.zIndex='';
+  _suplidorModalReturnTo=null; // si se cancela, el <select> que lo abrió se queda tal cual estaba
 }
 function saveSuplidor(){
   const nombre=document.getElementById('sup-nombre').value.trim();if(!nombre){notify('error','Campo Requerido','El nombre es obligatorio.');return;}
   if(esNombreDeMetodoDePago(nombre)){notify('error','Nombre No Válido',`"${nombre}" es una forma de pago, no un suplidor. Usa el nombre real de la empresa o persona.`);return;}
   const obj={id:_editingSuplidorId||Date.now(),nombre,rnc:document.getElementById('sup-rnc').value.trim(),categoria:document.getElementById('sup-categoria').value,email:document.getElementById('sup-email').value.trim(),tel:document.getElementById('sup-tel').value.trim(),dir:document.getElementById('sup-dir').value.trim()};
   if(_editingSuplidorId){const i=S.suplidores.findIndex(x=>x.id===_editingSuplidorId);S.suplidores[i]=obj;}else S.suplidores.push(obj);
-  save();closeModal('suplidorModal');renderSuplidores();refreshEgresoSelects();
+  const returnTo=_suplidorModalReturnTo; // closeSuplidorModal() lo limpia, así que se guarda antes
+  save();closeSuplidorModal();renderSuplidores();refreshEgresoSelects();
   // Rebuild CxP form so new suplidor appears in dropdown
   buildCXPForm(_cxpSection);
+  // Si este modal se abrió desde otro formulario (no desde la pestaña Suplidores), el suplidor
+  // recién creado/editado se selecciona automáticamente ahí — sin que el usuario tenga que
+  // volver a buscarlo en la lista.
+  if(returnTo){
+    const sel=document.getElementById(returnTo);
+    if(sel){
+      if(!sel.querySelector(`option[value="${obj.id}"]`)){
+        const opt=document.createElement('option'); opt.value=obj.id; opt.textContent=obj.nombre; sel.appendChild(opt);
+      }
+      sel.value=obj.id;
+    }
+  }
 }
 function deleteSuplidor(id){
   const suplidor=S.suplidores.find(s=>s.id===id);
@@ -8173,13 +8180,6 @@ function renderRevisionSuplidor(wrap){
           ${[...S.suplidores].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(s=>`<option value="${s.id}" ${supMatch&&supMatch.id===s.id?'selected':''}>${esc(s.nombre)}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" id="comp-sup-nuevo-wrap" style="grid-column:span 2;display:none;">
-        <label>Nombre del Nuevo Suplidor</label>
-        <div style="display:flex;gap:8px;">
-          <input autocomplete="off" type="text" id="comp-sup-nuevo-nombre" placeholder="Nombre..." style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();guardarSuplidorInlineComprobante();}">
-          <button type="button" class="btn btn-primary" style="white-space:nowrap;" onclick="guardarSuplidorInlineComprobante()">Guardar</button>
-        </div>
-      </div>
       <div class="form-group" style="grid-column:span 2;"><label>Factura / CxP a aplicar</label>
         <select id="comp-sup-invoice" onchange="onCompSupInvoiceChange()">
           <option value="" ${!mejorFacturaId?'selected':''}>Ninguna — registrar como Egreso suelto</option>
@@ -8207,37 +8207,17 @@ function renderRevisionSuplidor(wrap){
 
 function onCompSupInvoiceChange(){/* placeholder para futura sincronización visual */}
 
-// Permite crear un suplidor nuevo sin salir de "Cargar Comprobante" — antes había que cancelar,
-// ir a Suplidores, crearlo ahí, y volver a empezar todo el proceso de carga.
+// Permite crear un suplidor nuevo sin salir de "Cargar Comprobante" — abre el mismo modal
+// completo de Suplidor (Nombre, RNC, Categoría, Email, Teléfono, Dirección) que se usa desde
+// la pestaña Suplidores, y al guardar queda seleccionado aquí automáticamente. Antes había que
+// cancelar, ir a Suplidores, crearlo ahí, y volver a empezar todo el proceso de carga.
 function onCompSupSelectChange(){
   const sel=document.getElementById('comp-sup-select');
-  const wrap=document.getElementById('comp-sup-nuevo-wrap');
-  if(!sel||!wrap) return;
+  if(!sel) return;
   if(sel.value==='__nuevo__'){
-    wrap.style.display='';
-    setTimeout(()=>document.getElementById('comp-sup-nuevo-nombre')?.focus(),50);
-  } else {
-    wrap.style.display='none';
+    sel.value=''; // si cancela el modal, el desplegable ya queda en un estado limpio
+    openSuplidorModal(null,'comp-sup-select');
   }
-}
-function guardarSuplidorInlineComprobante(){
-  const input=document.getElementById('comp-sup-nuevo-nombre');
-  const nombre=input.value.trim();
-  if(!nombre){ notify('error','Campo Requerido','Escribe el nombre del suplidor.'); return; }
-  if(esNombreDeMetodoDePago(nombre)){ notify('error','Nombre No Válido',`"${nombre}" es una forma de pago, no un suplidor.`); return; }
-  if(S.suplidores.some(s=>normalizarTexto(s.nombre)===normalizarTexto(nombre))){ notify('info','Ya Existe','Ya hay un suplidor con ese nombre — selecciónalo de la lista.'); return; }
-  const nuevo={id:Date.now(),nombre,rnc:'',categoria:'materiales',email:'',tel:'',dir:''};
-  S.suplidores.push(nuevo);
-  save();
-  renderSuplidores();
-  const sel=document.getElementById('comp-sup-select');
-  const opt=document.createElement('option');
-  opt.value=nuevo.id; opt.textContent=nuevo.nombre;
-  sel.appendChild(opt);
-  sel.value=nuevo.id;
-  document.getElementById('comp-sup-nuevo-wrap').style.display='none';
-  input.value='';
-  notify('success','Suplidor Creado',`"${nombre}" se agregó y ya está seleccionado.`);
 }
 // Igual que en Registrar Egreso: el Tipo de Material solo aplica dentro de "Materiales" y no
 // cambia la categoría contable — es solo un detalle adicional guardado junto al Egreso.
@@ -8930,35 +8910,6 @@ function saveQuickCliente(){
   document.getElementById('ing-cliente').value=nuevo.id;
   // Also refresh the Clientes tab if visible
   renderClientes();
-}
-
-// ══ QUICK CREATE BENEFICIARIO (desde Egresos) ══
-function openQuickBeneficiario(){
-  ['qb-nombre','qb-rnc','qb-tel','qb-email'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.value='';
-  });
-  document.getElementById('quickBeneficiarioModal').classList.add('open');
-  setTimeout(()=>document.getElementById('qb-nombre')?.focus(), 150);
-}
-function saveQuickBeneficiario(){
-  const nombre=document.getElementById('qb-nombre').value.trim();
-  if(!nombre){notify('error','Campo Requerido','El nombre es obligatorio.');return;}
-  const nuevo={
-    id:Date.now(),nombre,
-    rnc:document.getElementById('qb-rnc').value.trim(),
-    categoria:'servicios',
-    tel:document.getElementById('qb-tel').value.trim(),
-    email:document.getElementById('qb-email').value.trim(),
-    dir:''
-  };
-  S.suplidores.push(nuevo);
-  save();
-  closeModal('quickBeneficiarioModal');
-  // Refresh dropdowns and auto-select the new beneficiary
-  refreshEgresoSelects();
-  document.getElementById('egr-suplidor').value=nuevo.id;
-  // Also refresh the Suplidores tab if visible
-  renderSuplidores();
 }
 
 // ══ CORTE DE BALANCE ══
