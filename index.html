@@ -2674,14 +2674,16 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 // varios avisos seguidos, se hace fila (uno a la vez, no se pisan entre sí).
 const _notifyQueue = [];
 let _notifyShowing = false;
-function notify(type, title, msg=''){
-  _notifyQueue.push({type,title,msg});
+let _notifyCurrentOnClose = null;
+function notify(type, title, msg='', onClose=null){
+  _notifyQueue.push({type,title,msg,onClose});
   if(!_notifyShowing) _processNotifyQueue();
 }
 function _processNotifyQueue(){
   if(!_notifyQueue.length){ _notifyShowing=false; return; }
   _notifyShowing = true;
-  const {type,title,msg} = _notifyQueue.shift();
+  const {type,title,msg,onClose} = _notifyQueue.shift();
+  _notifyCurrentOnClose = onClose;
   const icons={success:'◈',error:'⊘',info:'◎',warning:'◬'};
   const colors={success:'#4ade80',error:'#ef4444',info:'#818cf8',warning:'#fdc901'};
   const color = colors[type]||'#818cf8';
@@ -2698,6 +2700,8 @@ function _processNotifyQueue(){
 }
 function closeNotify(){
   document.getElementById('notifyModal').classList.remove('open');
+  const cb=_notifyCurrentOnClose; _notifyCurrentOnClose=null;
+  if(cb){ try{cb();}catch(e){console.error(e);} }
   setTimeout(_processNotifyQueue, 150); // pequeña pausa antes del siguiente, si hay más en fila
 }
 // Aviso pequeño y automático (esquina superior derecha, desaparece solo) — para confirmaciones
@@ -4741,7 +4745,7 @@ const CXP_CONFIG = {
       {id:'vence',     label:'Fecha Vencimiento',       type:'date',  span:1},
       {id:'metodo',    label:'Forma de Pago',           type:'select',span:1, options:['Transferencia','Efectivo','Cheque','Tarjeta de Crédito']},
       {id:'referencia',label:'RNC / Referencia',        type:'text',  span:2, placeholder:'RNC del proveedor o referencia...'},
-      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'select',span:2, options:['Materiales','Nómina Administrativa','Alquiler','Electricidad','Internet','Teléfono','Combustible','Equipos','Nómina de Producción','Publicidad','Impuestos','Contabilidad','Transportación']},
+      {id:'categoriaEgreso',label:'Categoría de Egreso',type:'egr-cat-select',span:2},
     ],
     headers: ['Proveedor','Concepto','Categoría','Monto','Fecha','Método','Cuenta','Estado',''],
   },
@@ -4824,6 +4828,13 @@ function buildCXPForm(section){
     if(f.type==='suplidor-select'){
       const opts=[...S.suplidores].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`).join('');
       input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;"><option value="">— Seleccionar —</option>${opts}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openSuplidorModal()" style="border-color:rgba(129,140,248,.3);color:#818cf8;padding:10px 12px;flex-shrink:0;white-space:nowrap;">+ Nuevo</button></div>`;
+    } else if(f.type==='egr-cat-select'){
+      // Misma fuente de datos que Egresos (getSelectableEgrCats) — antes esta categoría tenía
+      // su propia lista corta y desincronizada, con valores generados de la etiqueta (ej.
+      // "Nómina Administrativa" → "nómina_administrativa") que ni siquiera coincidían con las
+      // claves reales usadas en el resto del sistema. Ahora usa las claves reales directamente,
+      // y el botón ✎ abre el mismo gestor de categorías que ya existe en Egresos.
+      input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;"><option value="">— Selecciona —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="border-color:rgba(239,68,68,.3);color:#ef4444;padding:10px 12px;flex-shrink:0;" title="Gestionar categorías">✎</button></div>`;
     } else if(f.type==='select'){
       const opts = f.id==='categoriaEgreso' ? [...f.options].sort((a,b)=>a.localeCompare(b,'es')) : f.options;
       const blank = f.id==='categoriaEgreso' ? '<option value="">— Selecciona —</option>' : '';
@@ -4887,7 +4898,10 @@ function addCXP(){
   });
   if(!fieldsData.nombre || !fieldsData.monto){ notify('error','Campos Requeridos','Completa al menos Nombre y Monto.'); return; }
   if(cfg.fields.some(f=>f.id==='categoriaEgreso') && !fieldsData.categoriaEgreso){
-    notify('error','Falta la Categoría','Selecciona una Categoría de Egreso específica — no se permite dejarla en blanco.');
+    notify('error','Falta la Categoría','Selecciona una Categoría de Egreso específica — no se permite dejarla en blanco.',()=>{
+      const el=document.getElementById('cxp-f-categoriaEgreso');
+      if(el){ el.focus(); el.style.outline='2px solid #ef4444'; setTimeout(()=>{el.style.outline='';},1500); }
+    });
     return;
   }
 
@@ -5201,7 +5215,7 @@ function renderCXP(){
   const acctName = x => `<span style="color:#8899bb;">${S.accounts[x.payAccountIdx]?.name||'—'}</span>`;
   const catLabel = x => {
     if(!x.categoriaEgreso) return '<span style="color:#6b7a99;">—</span>';
-    const key = CXP_CAT_LABEL_TO_KEY[x.categoriaEgreso] || '';
+    const key = resolverCategoriaEgresoDeCxP(x.categoriaEgreso);
     const label = EGR_CAT_LABELS[key] || (S.categoriasEgresos||[]).find(c=>c.key===key)?.label || x.categoriaEgreso;
     return `<span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(label)}</span>`;
   };
@@ -6837,7 +6851,7 @@ function getCatLabel(key,list){
 // renderizado silenciosamente y por eso la columna Categoría nunca se veía.
 function catLabel(x){
   if(!x.categoriaEgreso) return '—';
-  const key = CXP_CAT_LABEL_TO_KEY[x.categoriaEgreso] || x.categoriaEgreso;
+  const key = resolverCategoriaEgresoDeCxP(x.categoriaEgreso) || x.categoriaEgreso;
   return esc(getCatLabel(key, getAllEgrCats()));
 }
 function addCustomCategory(type){
@@ -7356,8 +7370,20 @@ function confirmarCargaFacturaCompra(){
     const s=S.suplidores.find(x=>x.id===parseInt(proveedorSelVal));
     proveedorNombre=s?.nombre||'';
   }
-  if(!proveedorNombre){ notify('error','Falta el Proveedor','Selecciona o escribe el proveedor de esta factura.'); return; }
-  if(!categoria){ notify('error','Falta la Categoría','Elige una categoría antes de continuar.'); return; }
+  if(!proveedorNombre){
+    notify('error','Falta el Proveedor','Selecciona o escribe el proveedor de esta factura.',()=>{
+      const el=document.getElementById('fc-proveedor');
+      if(el){ el.focus(); el.style.outline='2px solid #ef4444'; setTimeout(()=>{el.style.outline='';},1500); }
+    });
+    return;
+  }
+  if(!categoria){
+    notify('error','Falta la Categoría','Elige una categoría antes de continuar.',()=>{
+      const el=document.getElementById('fc-categoria');
+      if(el){ el.focus(); el.style.outline='2px solid #ef4444'; setTimeout(()=>{el.style.outline='';},1500); }
+    });
+    return;
+  }
   if(total<=0){ notify('error','Monto Inválido','El Total debe ser mayor a cero.'); return; }
 
   // Duplicado: mismo N° de factura o NCF ya registrado, en Egresos o en CxP —
@@ -7423,14 +7449,9 @@ function _procederConFacturaCompra(proveedorSelVal,proveedorNombre,ncf,numFactur
     document.getElementById('cxp-f-fecha').value=fechaEmision;
     document.getElementById('cxp-f-vence').value=fechaVencimiento||fechaEmision;
     document.getElementById('cxp-f-referencia').value=[ncf,numFactura].filter(Boolean).join(' · ');
+    // Misma clave real en ambos formularios ahora — ya no hace falta traducir por etiqueta.
     const catSel=document.getElementById('cxp-f-categoriaEgreso');
-    if(catSel){
-      const catLabel = getSelectableEgrCats().find(c=>c.key===categoria)?.label;
-      if(catLabel){
-        const opt=[...catSel.options].find(o=>o.textContent===catLabel);
-        if(opt) catSel.value=opt.value;
-      }
-    }
+    if(catSel) catSel.value=categoria;
     addCXP();
   }
 }
@@ -8498,6 +8519,15 @@ function refreshEgresoSelects(){
     recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
     if(curVal && recCatSel.querySelector(`option[value="${curVal}"]`)) recCatSel.value=curVal;
   }
+  // CxP → Proveedores usa exactamente las mismas categorías que Egresos (antes tenía su propia
+  // lista corta y desincronizada) — se refresca aquí también por si el modal de "Gestionar
+  // Categorías" se usó mientras esta pestaña estaba abierta.
+  const cxpCatSel=document.getElementById('cxp-f-categoriaEgreso');
+  if(cxpCatSel){
+    const curVal=cxpCatSel.value;
+    cxpCatSel.innerHTML='<option value="">— Selecciona —</option>'+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    if(curVal && cxpCatSel.querySelector(`option[value="${curVal}"]`)) cxpCatSel.value=curVal;
+  }
 }
 function addEgreso(auto=false,data={}){
   const fecha=auto?data.fecha:document.getElementById('egr-fecha').value;
@@ -9003,15 +9033,22 @@ function applyCorte(){
 // ══ AUTO-INTEGRATION CxC/CxP → Ingresos/Egresos (base efectivo) ══
 // El ingreso/gasto se reconoce cuando se mueve el efectivo real (se cobra / se paga),
 // tal como funcionaba el sistema originalmente. Esta es la fuente de verdad para el
-// Estado de Resultados, Reportes y el Libro Diario/Mayor.
-// El <select> de categoriaEgreso en CxP guarda su value como texto.toLowerCase().replace(' ','_')
-// (ver buildCXPForm) — este mapa debe usar esas mismas llaves normalizadas, no las etiquetas
-// capitalizadas, o el match nunca ocurre (bug preexistente: todo caía en 'otros').
+// Histórico: registros de CxP creados ANTES de este fix guardaban categoriaEgreso como un slug
+// derivado de la etiqueta (ej. 'nómina', 'transportación') — este mapa los traduce a la clave
+// real. Los registros NUEVOS ya guardan la clave real directamente (ver egr-cat-select en
+// buildCXPForm), así que no necesitan traducción.
 const CXP_CAT_LABEL_TO_KEY={'materiales':'materiales','nómina':'nomina','alquiler':'alquiler',
   'luz_/_electricidad':'luz','internet':'internet','teléfono':'telefono',
   'combustible':'combustible','equipos':'equipos','subcontratación':'subcontratacion',
   'publicidad':'publicidad','impuestos':'impuestos','contabilidad':'contabilidad',
   'transportación':'transporte'};
+// Punto único para resolver categoriaEgreso de un ítem de CxP a su clave real — funciona tanto
+// para registros nuevos (ya es una clave real) como viejos (slug legado, vía CXP_CAT_LABEL_TO_KEY).
+function resolverCategoriaEgresoDeCxP(valor){
+  if(!valor) return '';
+  if(getAllEgrCats().some(c=>c.key===valor)) return valor;
+  return CXP_CAT_LABEL_TO_KEY[valor]||'';
+}
 
 // Repara el ITBIS (y Total, si también quedó mal) de facturas viejas afectadas por un bug ya
 // corregido: el auto-cálculo de ITBIS/Total en Nueva Factura truncaba montos con coma de miles
@@ -9178,7 +9215,7 @@ function repararITBISIngresosGenerados(){
 function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref=''){
   const fId = pagoId!=null ? pagoId : item.id;
   if(S.egresos.find(e=>e.fuenteId===fId&&e.fuente==='cxp'))return;
-  const cat = section==='prestamos' ? 'prestamos' : (item.categoriaEgreso ? (CXP_CAT_LABEL_TO_KEY[item.categoriaEgreso]||'') : '');
+  const cat = section==='prestamos' ? 'prestamos' : resolverCategoriaEgresoDeCxP(item.categoriaEgreso);
   // Si la factura original traía Subtotal/ITBIS desglosados (solo Proveedores, vía "Cargar
   // Factura de Compra" o el formulario normal de CxP), se prorratea el ITBIS según qué proporción
   // del total se está pagando en ESTE abono — para que un pago parcial no le adjudique de una vez
