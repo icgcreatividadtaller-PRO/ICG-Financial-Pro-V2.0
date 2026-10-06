@@ -648,6 +648,92 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
   <div class="splash-loading-text">Iniciando sistema...</div>
 </div>
 
+<!-- ══ PANTALLA DE REPOSO — aparece al abrir el sistema y tras 10 min sin actividad.
+     Solo isotipo ICG + hora, se desplaza despacio (evita imagen fija en el monitor).
+     Se quita únicamente con un clic; el teclado queda bloqueado mientras está activa. ══ -->
+<style>
+#icgReposo{position:fixed;inset:0;z-index:1000000;background:#020510;display:none;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;}
+#icgReposo.activo{display:block;}
+#icgReposo .rp-caja{position:absolute;top:0;left:0;width:230px;display:flex;flex-direction:column;align-items:center;gap:22px;
+  animation:rpX 53s ease-in-out infinite alternate,rpY 37s ease-in-out infinite alternate;will-change:transform;}
+#icgReposo .rp-logo{width:120px;height:auto;display:block;opacity:.95;}
+#icgReposo .rp-hora{font-family:var(--font,Arial,sans-serif);font-size:44px;font-weight:300;letter-spacing:.08em;color:#c7d2fe;font-variant-numeric:tabular-nums;line-height:1;}
+@keyframes rpX{from{transform:translateX(2vw);}to{transform:translateX(calc(98vw - 230px));}}
+@keyframes rpY{from{margin-top:3vh;}to{margin-top:calc(97vh - 220px);}}
+</style>
+<div id="icgReposo" aria-label="Pantalla de reposo">
+  <div class="rp-caja">
+    <img class="rp-logo" id="icgReposoLogo" alt="ICG">
+    <div class="rp-hora" id="icgReposoHora"></div>
+  </div>
+</div>
+<script>
+// ══ PANTALLA DE REPOSO ══
+// Es solo un velo visual: no cierra sesión ni detiene la sincronización con Firestore,
+// y no toca ningún dato del negocio. Vive únicamente en la memoria de la pestaña.
+(function(){
+  const REPOSO_MS = 10*60*1000; // 10 minutos de inactividad
+  const el = document.getElementById('icgReposo');
+  const horaEl = document.getElementById('icgReposoHora');
+  const logoEl = document.getElementById('icgReposoLogo');
+  let ultimaActividad = Date.now();
+  let relojTimer = null;
+
+  // Reutiliza el isotipo ya incrustado en el splash (evita duplicar el SVG en el archivo)
+  const fuente = document.querySelector('#splash .splash-logo');
+  if(fuente) logoEl.src = fuente.src;
+
+  function pintarHora(){
+    const d = new Date();
+    let h = d.getHours(); const ampm = h>=12 ? 'PM' : 'AM';
+    h = h%12 || 12;
+    horaEl.textContent = h+':'+String(d.getMinutes()).padStart(2,'0')+' '+ampm;
+  }
+  function bloquear(){
+    if(el.classList.contains('activo')) return;
+    // Cierra cualquier lista desplegable o campo con foco para que nada quede "escuchando" detrás
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    pintarHora();
+    el.classList.add('activo');
+    relojTimer = setInterval(pintarHora, 1000);
+  }
+  function desbloquear(){
+    el.classList.remove('activo');
+    clearInterval(relojTimer); relojTimer = null;
+    ultimaActividad = Date.now();
+  }
+
+  // Solo el clic (o toque) quita la pantalla
+  el.addEventListener('click', desbloquear);
+  el.addEventListener('touchend', function(e){ e.preventDefault(); desbloquear(); }, {passive:false});
+
+  // Mientras está activa, el teclado no debe escribir en los campos de atrás
+  window.addEventListener('keydown', function(e){
+    if(el.classList.contains('activo')){ e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
+  // Cualquier uso del sistema reinicia la cuenta de inactividad
+  ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(function(ev){
+    window.addEventListener(ev, function(){
+      if(!el.classList.contains('activo')) ultimaActividad = Date.now();
+    }, {passive:true, capture:true});
+  });
+
+  // Se compara contra la hora real (no un setTimeout largo) para que funcione
+  // aunque el navegador "duerma" la pestaña o la PC haya estado suspendida
+  setInterval(function(){
+    if(!el.classList.contains('activo') && Date.now()-ultimaActividad >= REPOSO_MS) bloquear();
+  }, 15000);
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden && !el.classList.contains('activo') && Date.now()-ultimaActividad >= REPOSO_MS) bloquear();
+  });
+
+  // Al abrir el sistema (por ejemplo al encender la PC) arranca ya en reposo hasta el primer clic
+  bloquear();
+  window._icgReposo = { bloquear: bloquear, desbloquear: desbloquear };
+})();
+</script>
+
 <!-- ══ LOGIN GATE — acceso restringido con Firebase Authentication ══ -->
 <div id="loginGate" style="display:none;position:fixed;inset:0;z-index:999998;background:#020510;align-items:center;justify-content:center;">
   <div style="width:100%;max-width:360px;padding:32px;">
@@ -738,6 +824,20 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
     <h2 class="notify-title" style="font-size:17px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Aviso</h2>
     <p class="notify-msg" style="font-size:15px;color:#c0c6d8;margin-bottom:22px;line-height:1.5;"></p>
     <button class="btn btn-primary" style="width:100%;" onclick="closeNotify()">OK</button>
+  </div>
+</div>
+
+<!-- ══ RECORDATORIO PERIÓDICO DE RESPALDO — aparece cada cierto tiempo para que nunca se olvide
+     exportar/guardar respaldo, ya que toda la información vive solo en Firestore. ══ -->
+<div class="modal-overlay" id="backupReminderModal">
+  <div class="modal notify-box" style="max-width:420px;border-width:2px;border-color:rgba(253,201,1,.5);text-align:center;">
+    <div style="font-size:40px;margin-bottom:12px;color:#fdc901;">☁️</div>
+    <h2 style="font-size:19px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;color:#fdc901;">Guardar Respaldo Ahora</h2>
+    <p style="font-size:15px;color:#c0c6d8;margin-bottom:22px;line-height:1.5;">Toda tu información financiera vive únicamente en este sistema — sin un respaldo descargado, cualquier imprevisto podría hacerla desaparecer. Tómate un momento para exportar.</p>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="exportarDesdeRecordatorio()">Exportar Ahora</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="cerrarRecordatorioRespaldo()">OK</button>
+    </div>
   </div>
 </div>
 
@@ -2974,6 +3074,7 @@ function toggleTipoVenta(section, id){
 function init(){
   ensureEstadoIntegro();
   instalarAutoFitBcards();
+  programarRecordatorioRespaldo();
   // El marco decorativo "HUD" (desenfoque animado, flote, barrido de luz) se estaba aplicando
   // a TODOS los modales del sistema — 3-4 animaciones infinitas encendiéndose de golpe cada vez
   // que abrías cualquier ventana, incluso las que usas todo el día (Registrar Pago, Gestionar
@@ -6358,10 +6459,32 @@ function togglePayRetenciones(){
 }
 
 
+// ══ RECORDATORIO PERIÓDICO DE RESPALDO ══
+// Cada tanto tiempo de sesión activa, un aviso recuerda exportar/guardar respaldo — nada de esto
+// se guarda en Firestore (es solo un recordatorio de uso, no un dato del negocio), así que vive
+// puramente en memoria del navegador mientras la pestaña esté abierta.
+const INTERVALO_RECORDATORIO_RESPALDO_MS = 45*60*1000; // 45 minutos
+let _backupReminderTimer=null;
+function programarRecordatorioRespaldo(){
+  if(_backupReminderTimer) clearTimeout(_backupReminderTimer);
+  _backupReminderTimer=setTimeout(()=>{
+    document.getElementById('backupReminderModal').classList.add('open');
+  }, INTERVALO_RECORDATORIO_RESPALDO_MS);
+}
+function cerrarRecordatorioRespaldo(){
+  document.getElementById('backupReminderModal').classList.remove('open');
+  programarRecordatorioRespaldo(); // se reprograma para la próxima vuelta
+}
+function exportarDesdeRecordatorio(){
+  exportData();
+  document.getElementById('backupReminderModal').classList.remove('open');
+  programarRecordatorioRespaldo();
+}
 function exportData(){
   const a=document.createElement('a');
   a.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify({version:3,exportedAt:new Date().toISOString(),...S},null,2));
   a.download=`ICG_Financial_PRO_Respaldo_${today()}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  programarRecordatorioRespaldo(); // exportar manualmente también reinicia la cuenta del próximo aviso
   const t=document.getElementById('autoSaveText');
   if(t){
     const previo=t.textContent;
