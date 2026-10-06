@@ -651,11 +651,41 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 <!-- ══ PANTALLA DE REPOSO — aparece al abrir el sistema y tras 10 min sin actividad.
      Solo isotipo ICG + hora, se desplaza despacio (evita imagen fija en el monitor).
      Se quita únicamente con un clic; el teclado queda bloqueado mientras está activa. ══ -->
+<div class="modal-overlay" id="reposoModal">
+  <div class="modal" style="max-width:440px;border-width:2px;border-color:rgba(129,140,248,.45);text-align:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h2 style="font-size:17px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">⏱ Pantalla de Reposo</h2>
+      <button class="modal-close" onclick="_icgReposo.cerrarConfig()">✕</button>
+    </div>
+    <p style="font-size:15px;color:#9ca3af;margin:0 0 6px;line-height:1.5;text-align:left;">Se activa sola tras este tiempo sin mover el mouse ni escribir. Se quita con un clic.</p>
+    <p id="reposoActual" style="font-size:15px;color:#fdc901;margin:0 0 14px;text-align:left;font-weight:600;"></p>
+    <div class="rp-presets" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:14px;">
+      <button class="btn btn-ghost" data-min="1" onclick="_icgReposo.fijarMin(1)">1 min</button>
+      <button class="btn btn-ghost" data-min="2" onclick="_icgReposo.fijarMin(2)">2 min</button>
+      <button class="btn btn-ghost" data-min="5" onclick="_icgReposo.fijarMin(5)">5 min</button>
+      <button class="btn btn-ghost" data-min="10" onclick="_icgReposo.fijarMin(10)">10 min</button>
+      <button class="btn btn-ghost" data-min="15" onclick="_icgReposo.fijarMin(15)">15 min</button>
+      <button class="btn btn-ghost" data-min="30" onclick="_icgReposo.fijarMin(30)">30 min</button>
+      <button class="btn btn-ghost" data-min="60" onclick="_icgReposo.fijarMin(60)">60 min</button>
+      <button class="btn btn-ghost" data-min="0" onclick="_icgReposo.fijarMin(0)">Nunca</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <div class="form-group" style="flex:1;margin:0;display:block;min-width:0;"><input autocomplete="off" type="text" inputmode="decimal" id="reposoCustom" placeholder="Otro (en minutos)" style="width:100%;height:44px;box-sizing:border-box;" onkeydown="if(event.key==='Enter')_icgReposo.guardarPersonalizado()"></div>
+      <button class="btn btn-indigo" onclick="_icgReposo.guardarPersonalizado()">Guardar</button>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="_icgReposo.probarAhora()">Probar ahora</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="_icgReposo.cerrarConfig()">OK</button>
+    </div>
+    <p style="font-size:13px;color:#6b7a99;margin:12px 0 0;">Este ajuste se guarda en esta computadora.</p>
+  </div>
+</div>
 <style>
 #icgReposo{position:fixed;inset:0;z-index:1000000;background:#020510;display:none;overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none;}
 #icgReposo.activo{display:block;}
 #icgReposo .rp-caja{position:absolute;top:0;left:0;width:230px;display:flex;flex-direction:column;align-items:center;gap:22px;
   animation:rpX 53s ease-in-out infinite alternate,rpY 37s ease-in-out infinite alternate;will-change:transform;}
+#reposoModal .rp-presets .btn{padding:11px 4px;letter-spacing:.02em;font-size:14px;white-space:nowrap;min-width:0;}
 #icgReposo .rp-logo{width:120px;height:auto;display:block;opacity:.95;}
 #icgReposo .rp-hora{font-family:var(--font,Arial,sans-serif);font-size:44px;font-weight:300;letter-spacing:.08em;color:#c7d2fe;font-variant-numeric:tabular-nums;line-height:1;}
 @keyframes rpX{from{transform:translateX(2vw);}to{transform:translateX(calc(98vw - 230px));}}
@@ -672,7 +702,14 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 // Es solo un velo visual: no cierra sesión ni detiene la sincronización con Firestore,
 // y no toca ningún dato del negocio. Vive únicamente en la memoria de la pestaña.
 (function(){
-  const REPOSO_MS = 10*60*1000; // 10 minutos de inactividad
+  const CLAVE = 'icgReposoMin';           // se guarda en esta PC (no en Firestore)
+  const POR_DEFECTO_MIN = 10;
+  function leerMin(){
+    try{ const v = localStorage.getItem(CLAVE); if(v===null) return POR_DEFECTO_MIN;
+         const n = parseFloat(v); return (isNaN(n)||n<0) ? POR_DEFECTO_MIN : n; }catch(e){ return POR_DEFECTO_MIN; }
+  }
+  let minutos = leerMin();                // 0 = nunca
+  function reposoMs(){ return minutos*60*1000; }
   const el = document.getElementById('icgReposo');
   const horaEl = document.getElementById('icgReposoHora');
   const logoEl = document.getElementById('icgReposoLogo');
@@ -713,7 +750,15 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
   }, true);
 
   // Cualquier uso del sistema reinicia la cuenta de inactividad
-  ['mousemove','mousedown','keydown','touchstart','wheel','scroll'].forEach(function(ev){
+  // Chrome genera "movimientos de mouse" falsos con el cursor quieto cuando algo se anima debajo;
+  // por eso el mouse solo cuenta si las coordenadas realmente cambiaron.
+  let mx = null, my = null;
+  window.addEventListener('mousemove', function(e){
+    if(el.classList.contains('activo')) return;
+    if(mx===null){ mx=e.screenX; my=e.screenY; return; }
+    if(Math.abs(e.screenX-mx)+Math.abs(e.screenY-my) >= 4){ mx=e.screenX; my=e.screenY; ultimaActividad = Date.now(); }
+  }, {passive:true, capture:true});
+  ['mousedown','keydown','touchstart','wheel'].forEach(function(ev){
     window.addEventListener(ev, function(){
       if(!el.classList.contains('activo')) ultimaActividad = Date.now();
     }, {passive:true, capture:true});
@@ -721,16 +766,40 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 
   // Se compara contra la hora real (no un setTimeout largo) para que funcione
   // aunque el navegador "duerma" la pestaña o la PC haya estado suspendida
-  setInterval(function(){
-    if(!el.classList.contains('activo') && Date.now()-ultimaActividad >= REPOSO_MS) bloquear();
-  }, 15000);
-  document.addEventListener('visibilitychange', function(){
-    if(!document.hidden && !el.classList.contains('activo') && Date.now()-ultimaActividad >= REPOSO_MS) bloquear();
-  });
+  function debeBloquear(){ return minutos>0 && !el.classList.contains('activo') && (Date.now()-ultimaActividad >= reposoMs()); }
+  setInterval(function(){ if(debeBloquear()) bloquear(); }, 5000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && debeBloquear()) bloquear(); });
+
+  // ── Configuración del tiempo (botón "Reposo" del encabezado) ──
+  function etiquetaMin(m){ return m===0 ? 'Desactivado' : (m===1 ? '1 minuto' : (Number.isInteger(m)? m : m.toFixed(1))+' minutos'); }
+  function refrescarEtiquetas(){
+    const b = document.getElementById('reposoBtn'); if(b) b.title = 'Pantalla de reposo: ' + etiquetaMin(minutos) + ' (clic para cambiar)';
+    const a = document.getElementById('reposoActual'); if(a) a.textContent = 'Actual: ' + etiquetaMin(minutos);
+    document.querySelectorAll('#reposoModal [data-min]').forEach(function(x){
+      const sel = parseFloat(x.getAttribute('data-min'))===minutos;
+      x.style.background = sel ? '#4f46e5' : ''; x.style.color = sel ? '#fff' : ''; x.style.borderColor = sel ? '#818cf8' : '';
+    });
+  }
+  function fijarMin(m){
+    minutos = m; ultimaActividad = Date.now();
+    try{ localStorage.setItem(CLAVE, String(m)); }catch(e){}
+    refrescarEtiquetas();
+  }
+  function abrirConfig(){ refrescarEtiquetas(); document.getElementById('reposoModal').classList.add('open'); }
+  function cerrarConfig(){ document.getElementById('reposoModal').classList.remove('open'); }
+  function guardarPersonalizado(){
+    const inp = document.getElementById('reposoCustom');
+    const v = parseFloat(String(inp.value).replace(',','.'));
+    if(isNaN(v) || v<0 || v>1440){ inp.style.borderColor='#ef4444'; return; }
+    inp.style.borderColor=''; inp.value=''; fijarMin(v);
+  }
+  function probarAhora(){ cerrarConfig(); setTimeout(bloquear, 150); }
+  document.addEventListener('DOMContentLoaded', refrescarEtiquetas);
+  if(document.readyState!=='loading') refrescarEtiquetas();
 
   // Al abrir el sistema (por ejemplo al encender la PC) arranca ya en reposo hasta el primer clic
   bloquear();
-  window._icgReposo = { bloquear: bloquear, desbloquear: desbloquear };
+  window._icgReposo = { bloquear: bloquear, desbloquear: desbloquear, fijarMin: fijarMin, abrirConfig: abrirConfig, cerrarConfig: cerrarConfig, guardarPersonalizado: guardarPersonalizado, probarAhora: probarAhora };
 })();
 </script>
 
@@ -943,6 +1012,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <span id="autoSaveIcon">☁</span>
       <span id="autoSaveText">Autoguardado</span>
     </div>
+    <button id="reposoBtn" class="btn" style="background:transparent;border:1px solid var(--border2);color:#b0bbcf;font-size:15px;padding:12px 18px;" title="Configurar pantalla de reposo" onclick="_icgReposo.abrirConfig()">⏱ Reposo</button>
     <button class="btn" style="background:transparent;border:1px solid var(--border2);color:#b0bbcf;font-size:15px;padding:12px 22px;" onclick="importData()">Importar</button>
     <button class="btn btn-indigo" style="font-size:15px;padding:12px 26px;" onclick="exportData()">Exportar</button>
     <button id="logoutBtn" class="btn" style="display:none;background:transparent;border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:15px;padding:12px 22px;" onclick="logoutUser()">Cerrar Sesión</button>
