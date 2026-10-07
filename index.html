@@ -1554,19 +1554,19 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <input autocomplete="off" type="text" id="ing-ref" placeholder="N° transferencia..." style="height:44px;box-sizing:border-box;">
       </div>
     </div>
-    <div class="form-actions"><button class="btn btn-primary" onclick="addIngreso()">Registrar Ingreso</button></div>
+    <div class="form-actions"><button class="btn btn-primary" onclick="addIngreso()">Registrar Ingreso</button><button class="btn btn-secondary" onclick="reiniciarFormIngreso()" title="Vacía todos los campos de este formulario (no borra nada ya registrado)">Reiniciar</button></div>
     <p style="font-size:15px;color:#6b7a99;margin-top:8px;">Los ingresos de CxC pagadas se registran automáticamente aquí.</p>
   </div>
   <div class="transactions-section">
     <h3>Historial de Ingresos</h3>
     <div class="filter-bar">
-      <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
+      <div class="form-group" style="flex:6 1 0;min-width:220px;"><label>🔍 Buscar</label>
         <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="debounceSearch(renderIngresos)" placeholder="Cliente, categoría o descripción..." style="width:100%;box-sizing:border-box;">
         <datalist id="ing-search-datalist"></datalist>
       </div>
-      <div class="form-group"><label>Mes</label><input autocomplete="off" type="month" id="ing-filter-mes" oninput="renderIngresos()" style="width:160px;"></div>
-      <div class="form-group"><label>Categoría</label>
-        <select id="ing-filter-cat" autocomplete="off" onchange="renderIngresos()" style="width:200px;">
+      <div class="form-group" style="flex:1 1 160px;"><label>Mes</label><input autocomplete="off" type="month" id="ing-filter-mes" oninput="renderIngresos()" style="width:100%;box-sizing:border-box;"></div>
+      <div class="form-group" style="flex:1 1 200px;"><label>Categoría</label>
+        <select id="ing-filter-cat" autocomplete="off" onchange="renderIngresos()" style="width:100%;box-sizing:border-box;">
           <option value="">Todas</option>
           <option value="offset">Impresión Offset</option>
           <option value="rot_vehicular">Rot. Vehicular</option>
@@ -1579,7 +1579,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
           <option value="acrilicas">Placas Acrílicas</option>
         </select>
       </div>
-      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('ing-filter-search').value='';document.getElementById('ing-filter-mes').value='';document.getElementById('ing-filter-cat').value='';renderIngresos()">Limpiar</button>
+      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('ing-filter-search').value='';document.getElementById('ing-filter-mes').value='';document.getElementById('ing-filter-cat').value='';renderIngresos()">Limpiar Filtro</button>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Fecha</th><th>Cliente</th><th>Categoría</th><th>Descripción</th><th>Tipo Venta</th><th>Método</th><th>Cuenta</th><th>Monto</th><th>ITBIS</th><th style="width:90px;">Fuente</th><th></th></tr></thead>
@@ -1795,19 +1795,20 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <button class="btn" style="background:#ef4444;color:#fff;font-weight:600;" onclick="addEgreso()">Registrar Egreso</button>
       <button class="btn btn-secondary" onclick="openComprobanteModalDesdeEgresos()">📎 Cargar Comprobante</button>
       <button class="btn btn-secondary" onclick="openFacturaCompraModal()">📄 Cargar Factura de Compra</button>
+      <button class="btn btn-secondary" onclick="reiniciarFormEgreso()" title="Vacía todos los campos de este formulario (no borra nada ya registrado)">Reiniciar</button>
     </div>
     <p style="font-size:15px;color:#6b7a99;margin-top:8px;">Los egresos de CxP pagadas se registran automáticamente aquí.</p>
   </div>
   <div class="transactions-section">
     <h3>Historial de Egresos</h3>
     <div class="filter-bar">
-      <div class="form-group" style="flex:1;min-width:220px;"><label>🔍 Buscar</label>
+      <div class="form-group" style="flex:6 1 0;min-width:220px;"><label>🔍 Buscar</label>
         <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="debounceSearch(renderEgresos)" placeholder="Suplidor, categoría o descripción..." style="width:100%;box-sizing:border-box;">
         <datalist id="egr-search-datalist"></datalist>
       </div>
-      <div class="form-group"><label>Mes</label><input autocomplete="off" type="month" id="egr-filter-mes" oninput="renderEgresos()" style="width:160px;"></div>
-      <div class="form-group"><label>Categoría</label>
-        <select id="egr-filter-cat" autocomplete="off" onchange="renderEgresos()" style="width:170px;">
+      <div class="form-group" style="flex:1 1 160px;"><label>Mes</label><input autocomplete="off" type="month" id="egr-filter-mes" oninput="renderEgresos()" style="width:100%;box-sizing:border-box;"></div>
+      <div class="form-group" style="flex:1 1 170px;"><label>Categoría</label>
+        <select id="egr-filter-cat" autocomplete="off" onchange="renderEgresos()" style="width:100%;box-sizing:border-box;">
           <option value="">Todas</option>
           <option value="materiales">Materiales</option>
           <option value="nomina">Nómina Administrativa</option>
@@ -1824,7 +1825,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
           <option value="transporte">Transportación</option>
         </select>
       </div>
-      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('egr-filter-search').value='';document.getElementById('egr-filter-mes').value='';document.getElementById('egr-filter-cat').value='';renderEgresos()">Limpiar</button>
+      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('egr-filter-search').value='';document.getElementById('egr-filter-mes').value='';document.getElementById('egr-filter-cat').value='';renderEgresos()">Limpiar Filtro</button>
     </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Categoría</th><th>Descripción</th><th>Método</th><th>Cuenta</th><th>Monto</th><th>ITBIS</th><th style="width:90px;">Fuente</th><th></th></tr></thead>
@@ -7124,6 +7125,16 @@ function cajaGeneralIdx(){
   return idx>=0 ? idx : 0;
 }
 
+// Vacía el formulario "Registrar Ingreso" (no toca nada ya registrado)
+function reiniciarFormIngreso(){
+  ['ing-monto','ing-desc','ing-ref'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('ing-fecha').value=today();
+  document.getElementById('ing-cliente').selectedIndex=0;
+  document.getElementById('ing-categoria').selectedIndex=0;
+  setTipoVenta('ing','corporativa');
+  const met=document.getElementById('ing-metodo'); if(met){ met.selectedIndex=0; onIngMetodoChange(met); }
+  const cu=document.getElementById('ing-cuenta'); if(cu && cu.options.length) cu.selectedIndex=0;
+}
 function addIngreso(auto=false,data={}){
   const fecha=auto?data.fecha:document.getElementById('ing-fecha').value;
   const clienteId=auto?data.clienteId:parseInt(document.getElementById('ing-cliente').value)||null;
@@ -8736,6 +8747,17 @@ function refreshEgresoSelects(){
     cxpCatSel.innerHTML='<option value="">— Selecciona —</option>'+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
     if(curVal && cxpCatSel.querySelector(`option[value="${curVal}"]`)) cxpCatSel.value=curVal;
   }
+}
+// Vacía el formulario "Registrar Egreso" (no toca nada ya registrado)
+function reiniciarFormEgreso(){
+  ['egr-subtotal','egr-itbis','egr-monto','egr-desc','egr-numfactura','egr-ref'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('egr-fecha').value=today();
+  document.getElementById('egr-suplidor').value='';
+  document.getElementById('egr-categoria').selectedIndex=0;
+  onEgrCategoriaChange();
+  document.getElementById('egr-tiene-itbis').checked=false; toggleEgrItbis();
+  const met=document.getElementById('egr-metodo'); if(met){ met.selectedIndex=0; onEgrMetodoChange(met); }
+  const cu=document.getElementById('egr-cuenta'); if(cu && cu.options.length) cu.selectedIndex=0;
 }
 function addEgreso(auto=false,data={}){
   const fecha=auto?data.fecha:document.getElementById('egr-fecha').value;
