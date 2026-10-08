@@ -2286,6 +2286,7 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
         <thead><tr><th>Categoría</th><th>Tipo de Costo</th></tr></thead>
         <tbody id="mapCostoDirectoBody"></tbody>
       </table></div>
+      <div style="font-size:14px;color:#6b7a99;margin-top:8px;">ITBIS (impuesto) y Préstamos (solo el interés, como Gasto Financiero) se manejan aparte y no se clasifican aquí.</div>
     </div>
   </div>
 
@@ -9181,14 +9182,17 @@ function renderRentabilidad(){
   const gE=p=>period==='mensual'?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+montoGastoPL(x),0):S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+montoGastoPL(x),0);
   // Costo Directo (produce el trabajo) vs Gasto Operativo (mantiene el taller abierto) — separa
   // Margen Bruto de Margen Neto. Mismo filtro de fecha que gE, solo que además separa por tipo.
-  const gPorTipo=(p,tipo)=>period==='mensual'
-    ?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo).reduce((s,x)=>s+montoGastoPL(x),0)
-    :S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo;}).reduce((s,x)=>s+montoGastoPL(x),0);
+  const enPeriodo=(p,x)=>period==='mensual'
+    ?(x.fecha.startsWith(p.key)&&pasaDesde(x.fecha))
+    :(x.fecha.startsWith(year+'')&&p.months.includes(parseInt(x.fecha.slice(5,7)))&&pasaDesde(x.fecha));
+  // Préstamos (solo interés) no es Operativo ni Directo: va aparte como Gasto Financiero.
+  const gPorTipo=(p,tipo)=>S.egresos.filter(x=>enPeriodo(p,x)&&x.categoria!=='prestamos'&&getTipoCosto(x.categoria)===tipo).reduce((s,x)=>s+montoGastoPL(x),0);
+  const gFinanciero=p=>S.egresos.filter(x=>enPeriodo(p,x)&&x.categoria==='prestamos').reduce((s,x)=>s+montoGastoPL(x),0);
   // "ing" = Ingresos Netos (SIN ITBIS) — el ITBIS cobrado nunca es ingreso real, es dinero
   // que le debes a la DGII. Usar el bruto (con ITBIS) aquí infla la utilidad artificialmente.
-  const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p),costoDirecto=gPorTipo(p,'directo'),gastoOperativo=gPorTipo(p,'operativo'),utilBruta=neto-costoDirecto;return{...p,ing:neto,itbis:itbisP,bruto,egr,costoDirecto,gastoOperativo,utilBruta,margenBruto:neto>0?(utilBruta/neto*100):0,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
+  const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p),costoDirecto=gPorTipo(p,'directo'),gastoOperativo=gPorTipo(p,'operativo'),gastoFinanciero=gFinanciero(p),utilBruta=neto-costoDirecto;return{...p,ing:neto,itbis:itbisP,bruto,egr,costoDirecto,gastoOperativo,gastoFinanciero,utilBruta,margenBruto:neto>0?(utilBruta/neto*100):0,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
   const totIng=data.reduce((s,p)=>s+p.ing,0),totItbis=data.reduce((s,p)=>s+p.itbis,0),totBruto=data.reduce((s,p)=>s+p.bruto,0),totEgr=data.reduce((s,p)=>s+p.egr,0),totUtil=totIng-totEgr,totMarg=totIng>0?(totUtil/totIng*100):0;
-  const totCostoDirecto=data.reduce((s,p)=>s+p.costoDirecto,0),totGastoOperativo=data.reduce((s,p)=>s+p.gastoOperativo,0),totUtilBruta=totIng-totCostoDirecto,totMargBruto=totIng>0?(totUtilBruta/totIng*100):0;
+  const totCostoDirecto=data.reduce((s,p)=>s+p.costoDirecto,0),totGastoOperativo=data.reduce((s,p)=>s+p.gastoOperativo,0),totGastoFinanciero=data.reduce((s,p)=>s+p.gastoFinanciero,0),totUtilOperativa=totIng-totCostoDirecto-totGastoOperativo,totUtilBruta=totIng-totCostoDirecto,totMargBruto=totIng>0?(totUtilBruta/totIng*100):0;
   document.getElementById('rent-kpis').innerHTML=`
     <div class="bcard" style="border-color:rgba(129,140,248,.3);flex:1;min-width:130px;"><div class="bcard-label">Ingresos Netos ${desde?'desde '+fmtDate(desde):year} <span title="Sin ITBIS — antes de impuestos">ⓘ</span></div><div class="bcard-value positive">${fmt(totIng)}</div></div>
     <div class="bcard" style="border-color:rgba(250,255,1,.3);flex:1;min-width:130px;"><div class="bcard-label">ITBIS Cobrado ${desde?'desde '+fmtDate(desde):year}</div><div class="bcard-value" style="color:#fdc901;">${fmt(totItbis)}</div></div>
@@ -9197,6 +9201,8 @@ function renderRentabilidad(){
     <div class="bcard" style="border-color:${totUtilBruta>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Bruta <span title="Ingresos Netos − Costo Directo. Mide qué tan eficiente es tu producción, sin contar gastos fijos del taller.">ⓘ</span></div><div class="bcard-value ${totUtilBruta>=0?'positive':'negative'}">${fmt(totUtilBruta)}</div></div>
     <div class="bcard" style="border-color:rgba(74,222,128,.3);flex:1;min-width:130px;"><div class="bcard-label">Margen Bruto</div><div class="bcard-value" style="color:${totMargBruto>=0?'#4ade80':'#ef4444'}">${totMargBruto.toFixed(1)}%</div></div>
     <div class="bcard" style="border-color:rgba(239,68,68,.3);flex:1;min-width:130px;"><div class="bcard-label">Gastos Operativos <span title="Lo que cuesta mantener el taller abierto, sin importar cuánto factures — renta, nómina administrativa, servicios. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value negative">${fmt(totGastoOperativo)}</div></div>
+    <div class="bcard" style="border-color:${totUtilOperativa>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Operativa <span title="Utilidad Bruta − Gastos Operativos. Lo que gana el taller con su trabajo, antes de intereses de préstamos.">ⓘ</span></div><div class="bcard-value ${totUtilOperativa>=0?'positive':'negative'}">${fmt(totUtilOperativa)}</div></div>
+    <div class="bcard" style="border-color:rgba(239,68,68,.3);flex:1;min-width:130px;"><div class="bcard-label">Gastos Financieros <span title="Solo el interés de las cuotas de préstamos. El capital que devuelves no es gasto: baja la deuda en el Balance General.">ⓘ</span></div><div class="bcard-value negative">${fmt(totGastoFinanciero)}</div></div>
     <div class="bcard" style="border-color:${totUtil>=0?'rgba(79,70,229,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Neta (Después de ITBIS)</div><div class="bcard-value ${totUtil>=0?'neutral':'negative'}">${fmt(totUtil)}</div></div>
     <div class="bcard" style="border-color:rgba(129,140,248,.3);flex:1;min-width:130px;"><div class="bcard-label">Margen Neto</div><div class="bcard-value" style="color:${totMarg>=0?'#818cf8':'#ef4444'}">${totMarg.toFixed(1)}%</div></div>`;
   wireAllPrivacyButtons();
@@ -9219,10 +9225,10 @@ function renderRentabilidad(){
   document.getElementById('rent-table-title').textContent=desde
     ?`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year} · desde ${fmtDate(desde)}`
     :`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year}`;
-  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
+  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos (sin ITBIS)</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
   document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${p.label}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
   // Category bars
-  const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+(tipo==='egreso'?montoGastoPL(x):x.monto);});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
+  const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+(tipo==='egreso'?montoGastoPL(x):x.monto);});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).filter(([k,v])=>tipo!=='egreso'||v>0.004).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
   const ingY=S.ingresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
   const egrY=S.egresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
   const ingLabelsAll={...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))};
@@ -9568,8 +9574,10 @@ function repararITBISIngresosGenerados(){
 // entró, así que no resta utilidad (baja el saldo del préstamo en el Balance General).
 // Egresos y bancos siguen mostrando la cuota completa porque ese dinero sí salió.
 function montoGastoPL(x){
+  if(x.categoria==='itbis') return 0; // remesa a la DGII: liquida una deuda de impuestos, no es gasto
   if(x.categoria==='prestamos' && typeof x.interesPrestamo==='number') return x.interesPrestamo;
-  return x.monto;
+  // Mismo criterio que Ingresos (sin ITBIS): el ITBIS pagado en compras es crédito fiscal, no costo.
+  return x.monto-(x.itbis||0);
 }
 // Pagos de cuotas hechos antes de este cambio: se estima su interés reconstruyendo el saldo hacia
 // atrás desde el saldo actual de cada préstamo. Es una aproximación (marca interesEstimado).
@@ -10234,7 +10242,7 @@ function renderPlanCuentas(){
   }).join(''):`<tr><td colspan="2"><div class="empty-state">Sin categorías de tarjeta creadas todavía.</div></td></tr>`;
 
   // Mapeo de Categorías de Egresos → Tipo de Costo (Directo vs Operativo)
-  document.getElementById('mapCostoDirectoBody').innerHTML=getAllEgrCats().map(c=>{
+  document.getElementById('mapCostoDirectoBody').innerHTML=getAllEgrCats().filter(c=>c.key!=='itbis'&&c.key!=='prestamos').map(c=>{
     const tipo=getTipoCosto(c.key);
     return `<tr><td>${c.label}</td><td>
       <select onchange="S.categoriasCostoDirecto['${c.key}']=this.value;save();" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">
