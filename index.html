@@ -6281,11 +6281,23 @@ function repararEgresosFaltantesCaja(){
   // Pista para el usuario: ¿ya existe un Egreso con ese mismo monto pero otra fecha/cuenta/marca?
   let hayParecidos=false;
   const detalle = encontrados.map(({acc,t})=>{
-    const parecidos = S.egresos.filter(e=>Math.abs(e.monto-t.amount)<0.01);
+    // "Parecido" = mismo monto Y al menos 2 de estos 3: fecha a ±2 días, proveedor/descripción que aparece en el
+    // movimiento, o categoría (su nombre aparece en el movimiento). Un monto igual por casualidad no basta.
+    const norm=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+    const descTx=norm(t.desc);
+    const dias=(a,b)=>Math.abs((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/86400000);
+    const parecidos = S.egresos.filter(e=>{
+      if(Math.abs(e.monto-t.amount)>=0.01) return false;
+      const nom=norm(e.suplidorNombre), dsc=norm(e.desc), cat=norm(EGR_CAT_LABELS[e.categoria]||'');
+      const c1 = dias(e.fecha,t.date)<=2;
+      const c2 = (nom.length>=4 && descTx.includes(nom)) || (dsc.length>=4 && descTx.includes(dsc));
+      const c3 = cat.length>=4 && descTx.includes(cat);
+      return (c1?1:0)+(c2?1:0)+(c3?1:0) >= 2;
+    });
     let pista='';
     if(parecidos.length){
       hayParecidos=true;
-      pista = '<br>&nbsp;&nbsp;&nbsp;<span style="color:#fdc901;">⚠️ Ya existe un Egreso con ese monto: '+parecidos.map(e=>`${fmtDate(e.fecha)} — ${e.esHistorico?'<strong>marcado Histórico</strong>':(e.cuentaIdx==null?'Tarjeta/sin cuenta':esc((S.accounts[e.cuentaIdx]||{}).name||'?'))} — ${esc(e.suplidorNombre||e.desc||'')}`).join(' | ')+'</span>';
+      pista = '<br>&nbsp;&nbsp;&nbsp;<span style="color:#fdc901;">⚠️ Ya existe un Egreso parecido (monto + fecha/concepto/categoría): '+parecidos.map(e=>`${fmtDate(e.fecha)} — ${e.esHistorico?'<strong>marcado Histórico</strong>':(e.cuentaIdx==null?'Tarjeta/sin cuenta':esc((S.accounts[e.cuentaIdx]||{}).name||'?'))} — ${esc(e.suplidorNombre||e.desc||'')}`).join(' | ')+'</span>';
     }
     return `• ${fmtDate(t.date)} — ${esc(acc.name)} — ${fmt(t.amount)} — ${esc(t.desc)}${pista}`;
   }).join('<br>');
