@@ -3172,6 +3172,7 @@ function init(){
   seedDefaultCatAccountMap();
   limpiarAsientosDevengoObsoletos();
   repararEgresosFaltantesDeCxP();
+  estimarInteresPrestamosViejos();
   repararIngresosFaltantesDeCxC();
   limpiarEgresosDuplicadosDeCxP();
   limpiarIngresosDuplicadosDeCxC();
@@ -5967,6 +5968,14 @@ function confirmCXPPayment(){
 
   // Check if fully paid now
   const newPending = cxpPending(item);
+  const seccionDelPago = _cxpPaySection; // closeCXPPayModal() la deja en null antes de crear el egreso
+  // Parte de ESTE pago que es interés (solo préstamos con tasa): se guarda en el egreso para que
+  // Rentabilidad cuente como gasto solo el interés y no el capital devuelto.
+  let interesDeEstePago = null;
+  if(_cxpPaySection==='prestamos' && (parseFloat(item.tasa)||0)>0){
+    const cuotaBase = (parseFloat(item.monto)||0)>0 ? item.monto : amount;
+    interesDeEstePago = Math.round(Math.min(amount, (parseFloat(item.saldo)||0)*(parseFloat(item.tasa)/100/12)*Math.min(1,amount/cuotaBase))*100)/100;
+  }
   let prestamoRolledOver = false, prestamoSaldado = false, capitalAbonado = 0, servicioRolledOver = false;
   if(newPending <= 0.009) {
     if(_cxpPaySection === 'prestamos'){
@@ -6034,7 +6043,7 @@ function confirmCXPPayment(){
   save(); closeCXPPayModal(); renderCXP();
   // Base efectivo: el gasto se reconoce al pagar, no al recibir la obligación.
   // Histórico: mismo egreso para el Estado de Resultados, pero sin tocar ninguna cuenta bancaria.
-  autoEgresoFromCxP(item, amount, date, method, accountIdx, method==='historico', _cxpPaySection, pagoId, ref);
+  autoEgresoFromCxP(item, amount, date, method, accountIdx, method==='historico', seccionDelPago, pagoId, ref, interesDeEstePago);
 
   const isPartial = newPending > 0.009;
   let pdetail=`Monto: ${fmt(amount)} → ${method==='historico'?'<b>Histórico (sin cuenta)</b>':esc(S.accounts[accountIdx]?.name)||''}`;
@@ -8831,7 +8840,7 @@ function addEgreso(auto=false,data={}){
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
     const egresoId=Date.now()+Math.random();
-    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null});
+    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&typeof data.interesPrestamo==='number'?{interesPrestamo:data.interesPrestamo}:{})});
     S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(esHistorico){
@@ -9169,12 +9178,12 @@ function renderRentabilidad(){
   const pasaDesde=f=>!desde||f>=desde;
   const gI=p=>period==='mensual'?S.ingresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+x.monto,0):S.ingresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+x.monto,0);
   const gITBIS=p=>period==='mensual'?S.ingresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+(x.itbis||0),0):S.ingresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+(x.itbis||0),0);
-  const gE=p=>period==='mensual'?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+x.monto,0):S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+x.monto,0);
+  const gE=p=>period==='mensual'?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)).reduce((s,x)=>s+montoGastoPL(x),0):S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha);}).reduce((s,x)=>s+montoGastoPL(x),0);
   // Costo Directo (produce el trabajo) vs Gasto Operativo (mantiene el taller abierto) — separa
   // Margen Bruto de Margen Neto. Mismo filtro de fecha que gE, solo que además separa por tipo.
   const gPorTipo=(p,tipo)=>period==='mensual'
-    ?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo).reduce((s,x)=>s+x.monto,0)
-    :S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo;}).reduce((s,x)=>s+x.monto,0);
+    ?S.egresos.filter(x=>x.fecha.startsWith(p.key)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo).reduce((s,x)=>s+montoGastoPL(x),0)
+    :S.egresos.filter(x=>{const m=parseInt(x.fecha.slice(5,7));return x.fecha.startsWith(year+'')&&p.months.includes(m)&&pasaDesde(x.fecha)&&getTipoCosto(x.categoria)===tipo;}).reduce((s,x)=>s+montoGastoPL(x),0);
   // "ing" = Ingresos Netos (SIN ITBIS) — el ITBIS cobrado nunca es ingreso real, es dinero
   // que le debes a la DGII. Usar el bruto (con ITBIS) aquí infla la utilidad artificialmente.
   const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p),costoDirecto=gPorTipo(p,'directo'),gastoOperativo=gPorTipo(p,'operativo'),utilBruta=neto-costoDirecto;return{...p,ing:neto,itbis:itbisP,bruto,egr,costoDirecto,gastoOperativo,utilBruta,margenBruto:neto>0?(utilBruta/neto*100):0,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
@@ -9213,7 +9222,7 @@ function renderRentabilidad(){
   document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
   document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${p.label}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
   // Category bars
-  const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+x.monto;});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
+  const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+(tipo==='egreso'?montoGastoPL(x):x.monto);});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
   const ingY=S.ingresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
   const egrY=S.egresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
   const ingLabelsAll={...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))};
@@ -9250,7 +9259,7 @@ function verDetalleCategoria(tipo, catKey, year){
     ? {...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))}
     : {...EGR_CAT_LABELS,cxp:'Pago CxP',...Object.fromEntries((S.categoriasEgresos||[]).map(c=>[c.key,c.label]))};
   const catLabel = labels[catKey]||catKey;
-  const total = items.reduce((s,x)=>s+x.monto,0);
+  const total = items.reduce((s,x)=>s+(tipo==='egreso'?montoGastoPL(x):x.monto),0);
   document.getElementById('catDetailTitle').textContent = `${catLabel} · ${year} · ${fmt(total)}`;
   const rows = [...items].sort((a,b)=>b.fecha.localeCompare(a.fecha)).map(x=>{
     const quien = tipo==='ingreso' ? (x.clienteNombre||'—') : (x.suplidorNombre||'—');
@@ -9553,7 +9562,39 @@ function repararITBISIngresosGenerados(){
   });
 }
 
-function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref=''){
+
+// ── Préstamos en el Estado de Resultados ──
+// Del pago de una cuota de préstamo solo el INTERÉS es gasto; el capital es devolver dinero que ya
+// entró, así que no resta utilidad (baja el saldo del préstamo en el Balance General).
+// Egresos y bancos siguen mostrando la cuota completa porque ese dinero sí salió.
+function montoGastoPL(x){
+  if(x.categoria==='prestamos' && typeof x.interesPrestamo==='number') return x.interesPrestamo;
+  return x.monto;
+}
+// Pagos de cuotas hechos antes de este cambio: se estima su interés reconstruyendo el saldo hacia
+// atrás desde el saldo actual de cada préstamo. Es una aproximación (marca interesEstimado).
+function estimarInteresPrestamosViejos(){
+  let n=0;
+  (S.cuentasPagar?.prestamos||[]).forEach(pr=>{
+    const r=(parseFloat(pr.tasa)||0)/100/12; if(r<=0) return;
+    const desc=pr.concepto||pr.nombre;
+    const pend=S.egresos.filter(e=>e.categoria==='prestamos'&&e.fuente==='cxp'&&e.suplidorNombre===pr.nombre&&e.desc===desc);
+    if(!pend.some(e=>typeof e.interesPrestamo!=='number')) return;
+    let saldoDespues=parseFloat(pr.saldo)||0;
+    [...pend].sort((a,b)=>b.fecha.localeCompare(a.fecha)||(b.id>a.id?1:-1)).forEach(e=>{
+      const saldoAntes=(saldoDespues+e.monto)/(1+r);
+      if(typeof e.interesPrestamo!=='number'){
+        e.interesPrestamo=Math.round(Math.min(e.monto,saldoAntes*r)*100)/100;
+        e.interesEstimado=true; n++;
+      }
+      saldoDespues=saldoAntes;
+    });
+  });
+  if(n) save();
+  return n;
+}
+
+function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref='',interesPrestamo=null){
   const fId = pagoId!=null ? pagoId : item.id;
   if(S.egresos.find(e=>e.fuenteId===fId&&e.fuente==='cxp'))return;
   const cat = section==='prestamos' ? 'prestamos' : resolverCategoriaEgresoDeCxP(item.categoriaEgreso);
@@ -9568,7 +9609,7 @@ function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,
     subtotal = Math.round((amount-itbis)*100)/100;
   }
   addEgreso(true,{fecha:date,suplidorId:null,suplidorNombre:item.nombre,categoria:cat,monto:amount,itbis,subtotal,
-    desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,esHistorico});
+    desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,esHistorico,interesPrestamo:(typeof interesPrestamo==='number'?interesPrestamo:undefined)});
   save();
 }
 // Reparación única: por un bug ya corregido en el código (los Egresos generados al pagar una
