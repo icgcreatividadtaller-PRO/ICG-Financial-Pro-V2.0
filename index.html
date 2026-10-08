@@ -820,6 +820,23 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 
 <!-- ══ PIN de seguridad — protege Cuentas y Estado de Resultados ══ -->
 <!-- ══ CAMBIAR CATEGORÍA (Egreso) — no toca el pago ni el dinero ══ -->
+<div class="modal-overlay" id="cambiarFechaEgresoModal">
+  <div class="modal" style="max-width:400px;border-color:rgba(253,201,1,.4);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h2 style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.05em;">📅 Cambiar Fecha</h2>
+      <button class="modal-close" onclick="closeCambiarFechaEgresoModal()">✕</button>
+    </div>
+    <p id="cambiarFechaEgresoSubtitle" style="font-size:15px;color:#9ca3af;margin-bottom:16px;"></p>
+    <div class="form-group" style="margin-bottom:18px;">
+      <label>Nueva Fecha</label>
+      <input autocomplete="off" type="date" id="cambiarFechaEgreso-input" onclick="cdpOpen(this,event)" style="width:100%;height:44px;box-sizing:border-box;">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="closeCambiarFechaEgresoModal()">Cancelar</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="confirmarCambiarFechaEgreso()">Guardar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="cambiarCatEgresoModal">
   <div class="modal" style="max-width:400px;border-color:rgba(129,140,248,.4);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -8856,20 +8873,73 @@ function addEgreso(auto=false,data={}){
     }
   };
 
-  if(!auto){
-    const dup=buscarPosibleDuplicado('suplidor',monto,fecha,ref);
-    if(dup){
-      icgConfirm(
-        `Ya existe un registro parecido: ${dup.detalle}. ¿Confirmas que quieres registrar este egreso también?`,
-        '⚠️ Posible Duplicado',
-        'Sí, registrar de todos modos',
-        true,
-        'Cancelar'
-      ).then(ok=>{ if(ok) guardar(); });
-      return;
+  const continuarConDuplicado=()=>{
+    if(!auto){
+      const dup=buscarPosibleDuplicado('suplidor',monto,fecha,ref);
+      if(dup){
+        icgConfirm(
+          `Ya existe un registro parecido: ${dup.detalle}. ¿Confirmas que quieres registrar este egreso también?`,
+          '⚠️ Posible Duplicado',
+          'Sí, registrar de todos modos',
+          true,
+          'Cancelar'
+        ).then(ok=>{ if(ok) guardar(); });
+        return;
+      }
     }
+    guardar();
+  };
+  // El formulario trae la fecha de hoy por defecto: si se registra con esa fecha, se confirma para que
+  // un pago de otro día no quede con la fecha equivocada sin querer.
+  if(!auto && fecha===today()){
+    icgConfirm(
+      `Vas a registrar este egreso con la fecha de <strong>hoy (${fmtDate(fecha)})</strong>.<br><br>¿Es la fecha real del pago? Si el pago fue otro día, cancela y cámbiala.`,
+      '📅 Confirmar Fecha',
+      'Sí, es de hoy',
+      false,
+      'No, cambiar fecha'
+    ).then(ok=>{
+      if(ok) continuarConDuplicado();
+      else { const f=document.getElementById('egr-fecha'); if(f) f.focus(); }
+    });
+    return;
   }
-  guardar();
+  continuarConDuplicado();
+}
+// Cambia la fecha de un egreso manual ya registrado, junto con su movimiento en la cuenta (o el cargo de la tarjeta).
+let _cambiarFechaEgresoId=null;
+function cambiarFechaEgreso(id){
+  const x=S.egresos.find(e=>e.id===id); if(!x)return;
+  if(x.fuente && x.fuente!=='manual'){ icgAlert('Este egreso viene de otro registro (CxP o Recibo). Cambia la fecha desde ese módulo para que todo siga sincronizado.','No se puede cambiar aquí'); return; }
+  _cambiarFechaEgresoId=id;
+  document.getElementById('cambiarFechaEgresoSubtitle').innerHTML=`${esc(x.suplidorNombre)||'Egreso'} — ${fmt(x.monto)}<br><span style="color:#6b7a99;">Fecha actual: ${fmtDate(x.fecha)}. También se actualiza su movimiento en la cuenta, si lo tiene.</span>`;
+  document.getElementById('cambiarFechaEgreso-input').value=x.fecha;
+  document.getElementById('cambiarFechaEgresoModal').classList.add('open');
+}
+function closeCambiarFechaEgresoModal(){
+  document.getElementById('cambiarFechaEgresoModal').classList.remove('open');
+  _cambiarFechaEgresoId=null;
+}
+function confirmarCambiarFechaEgreso(){
+  if(_cambiarFechaEgresoId==null) return;
+  const x=S.egresos.find(e=>e.id===_cambiarFechaEgresoId); if(!x)return;
+  const nueva=document.getElementById('cambiarFechaEgreso-input').value;
+  if(!nueva){ notify('error','Falta la Fecha','Selecciona la nueva fecha.'); return; }
+  if(nueva===x.fecha){ closeCambiarFechaEgresoModal(); return; }
+  const vieja=x.fecha;
+  // Movimiento vinculado en la cuenta (mismo criterio que al eliminar): misma cuenta, fecha vieja y monto, "Egreso: ..."
+  const tx = (x.metodo!=='tarjeta' && !x.esHistorico && x.cuentaIdx!=null && S.accounts[x.cuentaIdx])
+    ? (S.accounts[x.cuentaIdx].transactions||[]).find(t=>t.type==='egreso' && !t.esTransferenciaInterna && !t.esDistribucion && t.date===vieja && Math.abs(t.amount-x.monto)<0.01 && /^Egreso:/.test(t.desc||''))
+    : null;
+  const cargo = x.metodo==='tarjeta' ? S.creditCard.transactions.find(t=>t.egresoRef===x.id) : null;
+  x.fecha=nueva;
+  S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  if(tx){ tx.date=nueva; S.accounts[x.cuentaIdx].transactions.sort((a,b)=>a.date.localeCompare(b.date)); }
+  if(cargo){ cargo.date=nueva; S.creditCard.transactions.sort((a,b)=>a.date.localeCompare(b.date)); }
+  save(); renderEgresos();
+  try{ if(tx) renderTx(x.cuentaIdx); if(cargo&&typeof renderCCTx==='function') renderCCTx(); renderConsolidated(); }catch(e){}
+  closeCambiarFechaEgresoModal();
+  notify('success','Fecha Actualizada',`${fmtDate(vieja)} → ${fmtDate(nueva)}${tx?' · movimiento de la cuenta también actualizado':''}${cargo?' · cargo de la tarjeta también actualizado':''}`);
 }
 function delEgreso(id){
   const x=S.egresos.find(e=>e.id===id);
@@ -9075,7 +9145,7 @@ function renderEgresos(){
     const egrCatLabelConSubcat = x.subcategoria ? `${esc(egrCatLabel)} — ${esc(x.subcategoria)}` : esc(egrCatLabel);
     const egrDesc = x.desc ? x.desc.replace(/^Egreso:\s*[^–]*–\s*/,'').trim()||x.desc : '—';
     const egrDescConFactura = x.numFactura ? `<strong style="color:#8899bb;">Fact. ${esc(x.numFactura)}</strong>${egrDesc!=='—'?' – '+esc(egrDesc):''}` : esc(egrDesc);
-    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${egrCatLabelConSubcat}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
+    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${egrCatLabelConSubcat}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="cambiarFechaEgreso(${x.id})" title="Cambiar Fecha" style="color:#fdc901;">📅</button>`:''}${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="10"><div class="empty-state">Sin egresos que coincidan con la búsqueda.</div></td></tr>`;
 }
 
