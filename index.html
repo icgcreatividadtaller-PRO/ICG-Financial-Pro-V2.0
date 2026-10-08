@@ -6211,8 +6211,12 @@ function verificacionMaestra(){
   // Vía 1: lo que Ingresos/Egresos NO históricos predicen que debió pasar en los bancos — aquí
   // SÍ se usa el monto bruto (con ITBIS), porque al banco entra/sale el efectivo completo, el
   // ITBIS no desaparece del movimiento bancario, solo de la Utilidad.
-  const ingresosNoHistBruto = S.ingresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
-  const egresosNoHistBruto = S.egresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
+  // Solo cuentan los que pasaron por una cuenta de banco/caja. Los egresos pagados con TARJETA de crédito
+  // no sacan dinero del banco (crean deuda en la tarjeta), así que no se esperan en el cambio bancario.
+  const pasaPorBanco = x => x.metodo!=='tarjeta' && x.cuentaIdx!=null && !!S.accounts[x.cuentaIdx];
+  const ingresosNoHistBruto = S.ingresos.filter(x=>!x.esHistorico && (x.cuentaIdx==null || !!S.accounts[x.cuentaIdx])).reduce((s,x)=>s+x.monto,0);
+  const egresosNoHistBruto = S.egresos.filter(x=>!x.esHistorico && pasaPorBanco(x)).reduce((s,x)=>s+x.monto,0);
+  const egresosTarjetaNoHist = S.egresos.filter(x=>!x.esHistorico && !pasaPorBanco(x)).reduce((s,x)=>s+x.monto,0);
   // Las Distribuciones de Utilidades sacan dinero real del banco pero NO son Egresos (son capital)
   let distribuidoBancos=0;
   S.accounts.forEach(acc=>(acc.transactions||[]).forEach(t=>{ if(t.esDistribucion) distribuidoBancos += t.amount; }));
@@ -6231,6 +6235,7 @@ function verificacionMaestra(){
     <strong>= Cambio real en bancos:</strong> ${fmt(cambioTotalBancos)}<br><br>
     <strong>Ingresos NO históricos (bruto, como entra al banco):</strong> ${fmt(ingresosNoHistBruto)}<br>
     <strong>− Egresos NO históricos (bruto, como sale del banco):</strong> ${fmt(egresosNoHistBruto)}<br>
+    <strong>(Egresos pagados con tarjeta — no salen del banco, no se esperan aquí):</strong> ${fmt(egresosTarjetaNoHist)}<br>
     <strong>− Distribuciones de Utilidades (retiros del dueño, no son gasto):</strong> ${fmt(distribuidoBancos)}<br>
     <strong>= Cambio ESPERADO en bancos:</strong> ${fmt(cambioEsperadoBancos)}<br><br>
     <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong>
