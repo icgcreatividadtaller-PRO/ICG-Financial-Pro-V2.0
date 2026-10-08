@@ -187,6 +187,9 @@ button:not(.del-btn):not(.modal-close):not(.notif-close):not(.rename-btn):not(.c
 .bcard-value.negative{color:var(--red);}
 .bcard-value.neutral{color:var(--indigo2);}
 .balance-cards{display:flex;gap:12px;flex-wrap:wrap;}
+/* Rentabilidad: dos filas (5 + 6 tarjetas), texto centrado y sin números cortados */
+#rent-kpis .bcard{flex:1 1 0 !important;min-width:150px !important;text-align:center;}
+#rent-kpis .rent-kpi-break{flex-basis:100%;height:0;margin:-8px 0;padding:0;border:0;}
 .account-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:16px;}
 .account-name-area h2{font-size:26px;font-weight:700;color:var(--text);letter-spacing:.02em;}
 .account-name-area p{font-size:15px;color:var(--text3);margin-top:6px;letter-spacing:.1em;}
@@ -9199,6 +9202,7 @@ function renderRentabilidad(){
     <div class="bcard" style="border-color:rgba(129,140,248,.15);flex:1;min-width:130px;"><div class="bcard-label">Total Facturado (con ITBIS)</div><div class="bcard-value" style="color:#9ca3af;">${fmt(totBruto)}</div></div>
     <div class="bcard" style="border-color:rgba(34,211,211,.3);flex:1;min-width:130px;"><div class="bcard-label">Costo Directo (Materiales, etc.) <span title="Lo que cuesta producir el trabajo en sí — materiales, subcontratación, impresión. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value" style="color:#22d3d3;">${fmt(totCostoDirecto)}</div></div>
     <div class="bcard" style="border-color:${totUtilBruta>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Bruta <span title="Ingresos Netos − Costo Directo. Mide qué tan eficiente es tu producción, sin contar gastos fijos del taller.">ⓘ</span></div><div class="bcard-value ${totUtilBruta>=0?'positive':'negative'}">${fmt(totUtilBruta)}</div></div>
+    <div class="rent-kpi-break"></div>
     <div class="bcard" style="border-color:rgba(74,222,128,.3);flex:1;min-width:130px;"><div class="bcard-label">Margen Bruto</div><div class="bcard-value" style="color:${totMargBruto>=0?'#4ade80':'#ef4444'}">${totMargBruto.toFixed(1)}%</div></div>
     <div class="bcard" style="border-color:rgba(239,68,68,.3);flex:1;min-width:130px;"><div class="bcard-label">Gastos Operativos <span title="Lo que cuesta mantener el taller abierto, sin importar cuánto factures — renta, nómina administrativa, servicios. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value negative">${fmt(totGastoOperativo)}</div></div>
     <div class="bcard" style="border-color:${totUtilOperativa>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Operativa <span title="Utilidad Bruta − Gastos Operativos. Lo que gana el taller con su trabajo, antes de intereses de préstamos.">ⓘ</span></div><div class="bcard-value ${totUtilOperativa>=0?'positive':'negative'}">${fmt(totUtilOperativa)}</div></div>
