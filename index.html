@@ -6213,7 +6213,10 @@ function verificacionMaestra(){
   // ITBIS no desaparece del movimiento bancario, solo de la Utilidad.
   const ingresosNoHistBruto = S.ingresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
   const egresosNoHistBruto = S.egresos.filter(x=>!x.esHistorico).reduce((s,x)=>s+x.monto,0);
-  const cambioEsperadoBancos = ingresosNoHistBruto - egresosNoHistBruto;
+  // Las Distribuciones de Utilidades sacan dinero real del banco pero NO son Egresos (son capital)
+  let distribuidoBancos=0;
+  S.accounts.forEach(acc=>(acc.transactions||[]).forEach(t=>{ if(t.esDistribucion) distribuidoBancos += t.amount; }));
+  const cambioEsperadoBancos = ingresosNoHistBruto - egresosNoHistBruto - distribuidoBancos;
 
   const diffBancos = Math.round((cambioTotalBancos - cambioEsperadoBancos)*100)/100;
 
@@ -6228,6 +6231,7 @@ function verificacionMaestra(){
     <strong>= Cambio real en bancos:</strong> ${fmt(cambioTotalBancos)}<br><br>
     <strong>Ingresos NO históricos (bruto, como entra al banco):</strong> ${fmt(ingresosNoHistBruto)}<br>
     <strong>− Egresos NO históricos (bruto, como sale del banco):</strong> ${fmt(egresosNoHistBruto)}<br>
+    <strong>− Distribuciones de Utilidades (retiros del dueño, no son gasto):</strong> ${fmt(distribuidoBancos)}<br>
     <strong>= Cambio ESPERADO en bancos:</strong> ${fmt(cambioEsperadoBancos)}<br><br>
     <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong>
   `;
@@ -6239,7 +6243,7 @@ function diagnosticarCuentaPorCuenta(){
     // esas nunca generan un Ingreso/Egreso registrado (a propósito, no son ventas ni gastos),
     // así que compararlas directo contra "esperado" las marcaría como error sin serlo.
     const transacciones = acc.transactions||[];
-    const cambioRealSinTransferencias = transacciones.filter(t=>!t.esTransferenciaInterna).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
+    const cambioRealSinTransferencias = transacciones.filter(t=>!t.esTransferenciaInterna && !t.esDistribucion).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
     const transferenciasNetas = transacciones.filter(t=>t.esTransferenciaInterna).reduce((s,t)=>s + (t.type==='ingreso' ? t.amount : -t.amount), 0);
     const ingresosReg = S.ingresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
     const egresosReg = S.egresos.filter(x=>!x.esHistorico && x.cuentaIdx===i).reduce((s,x)=>s+x.monto,0);
@@ -6264,6 +6268,7 @@ function repararEgresosFaltantesCaja(){
   S.accounts.forEach((acc,idx)=>{
     (acc.transactions||[]).forEach(t=>{
       if(t.esTransferenciaInterna) return;
+      if(t.esDistribucion) return; // retiro del dueño: capital, nunca gasto
       if(t.type!=='egreso' && t.type!=='impuesto') return;
       const yaExiste = S.egresos.some(e=>e.cuentaIdx===idx && e.fecha===t.date && Math.abs(e.monto-t.amount)<0.01 && !e.esHistorico);
       if(!yaExiste) encontrados.push({acc,idx,t});
@@ -6273,8 +6278,19 @@ function repararEgresosFaltantesCaja(){
     icgAlert('No se encontró ningún movimiento bancario sin su Egreso formal correspondiente. Todo está correcto.','Sin Egresos Faltantes');
     return;
   }
-  const detalle = encontrados.map(({acc,t})=>`• ${fmtDate(t.date)} — ${esc(acc.name)} — ${fmt(t.amount)} — ${esc(t.desc)}`).join('<br>');
-  icgConfirm(`Se encontraron <strong>${encontrados.length}</strong> movimiento(s) bancario(s) sin su Egreso formal — el dinero salió del banco pero nunca se registró como gasto en el Estado de Resultados:<br><br>${detalle}<br><br>Se crearán con categoría en blanco — usa 🏷️ en Egresos para clasificarlos después.`,'Reparar Egresos Faltantes de Banco','Corregir Todos',false).then(ok=>{
+  // Pista para el usuario: ¿ya existe un Egreso con ese mismo monto pero otra fecha/cuenta/marca?
+  let hayParecidos=false;
+  const detalle = encontrados.map(({acc,t})=>{
+    const parecidos = S.egresos.filter(e=>Math.abs(e.monto-t.amount)<0.01);
+    let pista='';
+    if(parecidos.length){
+      hayParecidos=true;
+      pista = '<br>&nbsp;&nbsp;&nbsp;<span style="color:#fdc901;">⚠️ Ya existe un Egreso con ese monto: '+parecidos.map(e=>`${fmtDate(e.fecha)} — ${e.esHistorico?'<strong>marcado Histórico</strong>':(e.cuentaIdx==null?'Tarjeta/sin cuenta':esc((S.accounts[e.cuentaIdx]||{}).name||'?'))} — ${esc(e.suplidorNombre||e.desc||'')}`).join(' | ')+'</span>';
+    }
+    return `• ${fmtDate(t.date)} — ${esc(acc.name)} — ${fmt(t.amount)} — ${esc(t.desc)}${pista}`;
+  }).join('<br>');
+  const avisoParecidos = hayParecidos ? '<br><br><strong style="color:#fdc901;">Las líneas con ⚠️ ya tienen un Egreso parecido: si confirmas, se duplicarán. Cancela y corrige primero ese Egreso.</strong>' : '';
+  icgConfirm(`Se encontraron <strong>${encontrados.length}</strong> movimiento(s) bancario(s) sin su Egreso formal — el dinero salió del banco pero nunca se registró como gasto en el Estado de Resultados:<br><br>${detalle}${avisoParecidos}<br><br>Se crearán con categoría en blanco — usa 🏷️ en Egresos para clasificarlos después.`,'Reparar Egresos Faltantes de Banco','Corregir Todos',false).then(ok=>{
     if(!ok) return;
     encontrados.forEach(({idx,t})=>{
       let suplidorNombre='', desc=t.desc||'';
@@ -8846,14 +8862,22 @@ function delEgreso(id){
     return Promise.resolve(false);
   }
   const cargoVinculado = x.metodo==='tarjeta' ? S.creditCard.transactions.find(t=>t.egresoRef===id) : null;
-  const msg = cargoVinculado
+  // Movimiento que este egreso dejó en la cuenta (banco o Caja): misma cuenta, fecha y monto,
+  // creado por addEgreso con descripción "Egreso: ..." — así no queda descontado un dinero que ya no es gasto.
+  const txVinculado = (x.metodo!=='tarjeta' && !x.esHistorico && x.cuentaIdx!=null && S.accounts[x.cuentaIdx])
+    ? (S.accounts[x.cuentaIdx].transactions||[]).find(t=>t.type==='egreso' && !t.esTransferenciaInterna && !t.esDistribucion && t.date===x.fecha && Math.abs(t.amount-x.monto)<0.01 && /^Egreso:/.test(t.desc||''))
+    : null;
+  let msg = cargoVinculado
     ? `Este egreso también generó un cargo de ${fmt(cargoVinculado.amount)} en tu Tarjeta de Crédito. Al eliminar el egreso, ese cargo se eliminará también. ¿Continuar?`
     : '¿Eliminar este egreso del historial?';
+  if(txVinculado) msg = `Este egreso también descontó ${fmt(txVinculado.amount)} de la cuenta <strong>${esc(S.accounts[x.cuentaIdx].name)}</strong> (${fmtDate(txVinculado.date)}). Al eliminarlo, ese movimiento se eliminará también y el saldo de la cuenta se recupera. ¿Continuar?`;
   return icgConfirm(msg,'Eliminar Egreso','Eliminar',true).then(ok=>{
     if(!ok)return false;
     if(cargoVinculado) S.creditCard.transactions=S.creditCard.transactions.filter(t=>t.id!==cargoVinculado.id);
+    if(txVinculado){ S.accounts[x.cuentaIdx].transactions=S.accounts[x.cuentaIdx].transactions.filter(t=>t.id!==txVinculado.id); }
     S.egresos=S.egresos.filter(e=>e.id!==id);
     save(); renderEgresos(); updateCCCards(); renderCCTx();
+    if(txVinculado){ try{ renderTx(x.cuentaIdx); renderConsolidated(); }catch(e){} }
     return true;
   });
 }
