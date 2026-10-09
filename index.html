@@ -5718,11 +5718,15 @@ const FIN={
       return (c.includes('TINTIN')||c.includes('PILY'))&&p.estado!=='pagada';
     }),p=>parseFloat(p.saldo)||0);
     const tarjetaAperturaAdeudo=Math.max(0,r2(limitRD-(S.creditCard.initAvailRD??S.creditCard.availableRD??0)));
-    const capitalAperturaTransicion=S.capitalAperturaTransicion||0; // valor FIJO, calculado una sola vez
     // ITBIS de facturas emitidas ANTES del 27-ago-2026: ya resuelto en V1; el dinero cobrado lo trae adentro → capital de apertura.
     const itbisPreAperturaPendiente=sumC(FIN.facturasAbiertas().filter(f=>(f.x.issued||'')<CUTOVER_V2),f=>f.itbisPendiente);
     const itbisPreAperturaCobrado=sumC(S.ingresos.filter(i=>!i.esHistorico&&i.fuente==='cxc'),i=>{ const f=facturaDeIngreso(i); return (f&&(f.issued||'')<CUTOVER_V2)?(i.itbis||0):0; });
     const itbisPreApertura=r2(itbisPreAperturaPendiente+itbisPreAperturaCobrado);
+    // El ajuste fijo de transición (S.capitalAperturaTransicion) representa el ITBIS de las facturas
+    // anteriores al 27-ago ya cobradas. Hoy ese mismo ITBIS se calcula directo de las facturas
+    // (itbisPreAperturaCobrado), así que el ajuste solo cubre lo que ese cálculo ya no alcanza a ver
+    // (por ejemplo, si esas facturas se eliminaron). Así el mismo dinero nunca cuenta dos veces.
+    const capitalAperturaTransicion=Math.max(0,r2((S.capitalAperturaTransicion||0)-itbisPreAperturaCobrado));
     const capitalTitular=r2(totalActivosFijos+saldosInicialesCuentas+ajustesDeCorte-prestamosAperturaBHD-tarjetaAperturaAdeudo+capitalAperturaTransicion+itbisPreApertura);
     const ingresosNetosHistoricos=sumC(S.ingresos,FIN.ingresoNeto);
     const egresosHistoricos=sumC(S.egresos,FIN.egresoBalance);
