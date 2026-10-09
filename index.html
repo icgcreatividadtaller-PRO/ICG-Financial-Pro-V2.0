@@ -85,7 +85,7 @@ input,textarea,select,td,.mono,.bcard-value,.kpi-value{text-transform:none;lette
 .block-nav-btn{font-size:15px;font-weight:700;padding:18px 28px;letter-spacing:.16em;}
 #subTabsBar{background:var(--s1);border-bottom:1px solid var(--border2);padding:0 32px;display:flex;align-items:center;gap:2px;overflow-x:auto;}
 #subTabsBar::-webkit-scrollbar{height:0;}
-#subTabsBar .nav-btn{padding:12px 16px;font-size:15px;}
+#subTabsBar .nav-btn{padding:12px 12px;font-size:14px;letter-spacing:.08em;}
 @keyframes asSpin{to{transform:rotate(360deg);}}
 
 /* ── BUTTONS ── */
@@ -2050,6 +2050,13 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 </div>
 
 <!-- ══ BALANCE GENERAL ══ -->
+<div class="panel" id="panel-bitacora">
+  <div class="account-top">
+    <div class="account-name-area"><h2 style="color:#818cf8;">Bitácora y Respaldos</h2><p>Todo lo que se crea, cambia o elimina · papelera para deshacer borrados · copias automáticas del sistema</p></div>
+  </div>
+  <div id="bit-contenido"></div>
+</div>
+
 <div class="panel" id="panel-balancegeneral">
   <div class="account-top">
     <div class="account-name-area"><h2 style="color:#818cf8;">Balance General</h2><p>Activos, Pasivos y Capital · ICG Creatividad · al día de hoy</p></div>
@@ -2399,11 +2406,11 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       <span>Pendiente: <strong id="pay-pendiente-display" style="color:#ef4444;"></strong></span>
     </div>
     <div style="background:rgba(79,70,229,.06);border:2px solid rgba(79,70,229,.25);border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-      <label style="display:block;margin-bottom:6px;font-size:15px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;">Monto a Cobrar Ahora (antes de retención)</label>
+      <label style="display:block;margin-bottom:6px;font-size:15px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;">Monto Cobrado (antes de retención)</label>
       <input autocomplete="off" type="text" inputmode="decimal" id="pay-monto-ahora" placeholder="0.00" min="0" step="0.01"
         style="width:100%;border-color:rgba(79,70,229,.4);font-family:var(--mono);font-size:18px;font-weight:600;height:44px;box-sizing:border-box;"
         oninput="formatMontoInput(this);calcPayNet()">
-      <div style="font-size:12px;line-height:1.35;color:#6b7a99;margin-top:4px;">Puede ser el total pendiente o un abono parcial — la factura solo se marca "Pagada" cuando esto llega a cubrir todo el saldo.</div>
+      <div style="font-size:12px;line-height:1.35;color:#6b7a99;margin-top:4px;">Escribe aquí lo que te pagó el cliente. Si es menos que el saldo, queda como abono parcial; la factura solo se marca "Pagada" cuando se cubre todo el saldo.</div>
     </div>
 
     <!-- Método + Banco + Fecha + Referencia -->
@@ -2471,18 +2478,14 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
       </div>
     </div>
 
-    <!-- Monto neto -->
+    <!-- Monto neto: se calcula solo (cobrado − retención), no se edita -->
     <div style="background:rgba(79,70,229,.07);border:2px solid rgba(79,70,229,.3);border-radius:10px;padding:14px 16px;margin-bottom:18px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:15px;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;">Monto a Acreditar:</span>
         <span id="pay-net-display" style="font-family:var(--mono);font-size:24px;font-weight:700;color:#818cf8;"></span>
       </div>
-      <div class="form-group" style="margin:0;">
-        <label>Monto recibido (RD$) — editable si difiere</label>
-        <input autocomplete="off" type="text" inputmode="decimal" id="pay-net-amount" placeholder="0.00" min="0" step="0.01"
-          style="border-color:rgba(79,70,229,.4);font-family:var(--mono);font-size:18px;font-weight:600;"
-          oninput="formatMontoInput(this);document.getElementById('pay-net-display').textContent=fmt(numVal(this))">
-      </div>
+      <div style="font-size:12px;line-height:1.35;color:#6b7a99;margin-top:6px;">Es lo que entra a tu cuenta: el monto cobrado menos la retención, si hay. Se calcula solo.</div>
+      <input type="hidden" id="pay-net-amount" value="">
     </div>
 
     <div style="display:flex;gap:10px;">
@@ -3156,7 +3159,7 @@ function toggleTipoVenta(section, id){
 }
 
 // El vigía del cuadre se dispara después de cada guardado (ver programarVigiaCuadre).
-(function(){ const _saveOriginal=save; save=function(){ const r=_saveOriginal.apply(this,arguments); try{programarVigiaCuadre();}catch(e){} return r; }; })();
+(function(){ const _saveOriginal=save; save=function(){ const r=_saveOriginal.apply(this,arguments); try{programarVigiaCuadre();}catch(e){} try{programarBitacora();}catch(e){} return r; }; })();
 
 // ══════════════════ INIT ══════════════════
 function init(){
@@ -3177,6 +3180,7 @@ function init(){
   document.getElementById('cxc-issued').addEventListener('change', calcDue);
   calcDue();
   seedDefaultCatAccountMap();
+  migrarVinculosPorId();
   limpiarAsientosDevengoObsoletos();
   repararEgresosFaltantesDeCxP();
   estimarInteresPrestamosViejos();
@@ -3184,6 +3188,7 @@ function init(){
   limpiarEgresosDuplicadosDeCxP();
   limpiarIngresosDuplicadosDeCxC();
   repararSuplidoresFaltantes();
+  iniciarBitacora();
   renderTabs();
   renderCCPanel(); renderCXC(); buildCXPForm('proveedores');
   refreshIngresoSelects(); refreshEgresoSelects();
@@ -3217,7 +3222,8 @@ const NAV_BLOCKS={
     {id:'tab-rep',cls:'',label:'Reportes',t:'reportes'},
     {id:'tab-rent',cls:'nav-indigo',label:'Estado de Resultados',t:'rentabilidad'},
     {id:'tab-flujo',cls:'nav-indigo',label:'Flujo de Caja',t:'flujocaja'},
-    {id:'tab-balance',cls:'',label:'Balance General',t:'balancegeneral'}
+    {id:'tab-balance',cls:'',label:'Balance General',t:'balancegeneral'},
+    {id:'tab-bitacora',cls:'nav-indigo',label:'Bitácora',t:'bitacora'}
   ]}
 };
 let _activeBlock='operaciones';
@@ -3283,7 +3289,7 @@ let _pendingTabTarget = null;
 let _pinGateMode = 'enter'; // 'enter' | 'create' | 'change'
 
 function activateTab(idx){
-  const esProtegida = (typeof idx==='number') || ['cuentas','cc','rentabilidad','consolidated','reportes','flujocaja','balancegeneral','comparativo'].includes(idx);
+  const esProtegida = (typeof idx==='number') || ['cuentas','cc','rentabilidad','consolidated','reportes','flujocaja','balancegeneral','comparativo','bitacora'].includes(idx);
   if(esProtegida && !_pinUnlockedThisSession){
     _pendingTabTarget = idx;
     openPinGate(S.securityPin ? 'enter' : 'create');
@@ -3503,7 +3509,7 @@ function _activateTabReal(idx){
              ingresos:'tab-ing',egresos:'tab-egr',clientes:'tab-cli',
              suplidores:'tab-sup',rentabilidad:'tab-rent',reportes:'tab-rep',consolidated:'tab-con',
              comparativo:'tab-comp',
-             contabilidad:'tab-contab',flujocaja:'tab-flujo',balancegeneral:'tab-balance'};
+             contabilidad:'tab-contab',flujocaja:'tab-flujo',balancegeneral:'tab-balance',bitacora:'tab-bitacora'};
   // Defensa contra valores residuales (restauración del navegador u otra causa) en campos de
   // texto libre que NUNCA deben traer contenido por defecto — deben abrir siempre vacíos.
   const limpiarCampo=id=>{const el=document.getElementById(id);if(el)el.value='';};
@@ -3531,6 +3537,7 @@ function _activateTabReal(idx){
     if(idx==='contabilidad') renderContabilidad();
     if(idx==='flujocaja') renderFlujoCaja();
     if(idx==='balancegeneral') renderBalanceGeneral();
+    if(idx==='bitacora') renderBitacora();
   }
 }
 
@@ -3722,19 +3729,107 @@ function _addTxConfirmed(i,date,type,method,amount,desc,ref=''){
 }
 
 function pushTx(i,tx){
+  if(tx && tx.amount!=null) tx.amount=r2(tx.amount);
   S.accounts[i].transactions.push(tx);
   S.accounts[i].transactions.sort((a,b)=>a.date.localeCompare(b.date));
 }
 
+// ══════════════════ VÍNCULOS POR ID ══════════════════
+// Cada movimiento de banco creado por un registro (ingreso, egreso, recibo, distribución, cobro, pago)
+// lleva linkTipo + linkId: el ID de su registro de origen. Así borrar o corregir un registro encuentra
+// SU movimiento exacto, sin adivinar por el texto de la descripción ni por fecha+monto.
+function buscarTxVinculado(tipo,id){
+  for(let i=0;i<S.accounts.length;i++){
+    const t=(S.accounts[i].transactions||[]).find(x=>x.linkTipo===tipo && x.linkId===id);
+    if(t) return {idx:i,tx:t};
+  }
+  return null;
+}
+function quitarTx(idx,txId){ S.accounts[idx].transactions=S.accounts[idx].transactions.filter(x=>x.id!==txId); }
+function etiquetaOrigenTx(t){
+  const m={ingreso:'un Ingreso',egreso:'un Egreso',recibo:'un Recibo de Ingreso',reciboEgreso:'un Recibo de Egreso',distribucion:'una Distribución de Utilidades',cxcPago:'el cobro de una factura (CxC)',cxpPago:'el pago de una cuenta por pagar (CxP)',ccPago:'un pago de Tarjeta de Crédito'};
+  return m[t.linkTipo]||null;
+}
+// Para registros anteriores a este sistema de vínculos: se enlazan UNA vez (solo cuando la coincidencia
+// es clara: misma cuenta, fecha y monto, y el texto de la descripción es del tipo correcto). A partir
+// de ahí todo se busca por ID. Es seguro correrlo muchas veces (no toca lo que ya está enlazado).
+function migrarVinculosPorId(){
+  let n=0;
+  const usados=new Set();
+  S.accounts.forEach(a=>(a.transactions||[]).forEach(t=>{ if(t.linkTipo) usados.add(t.linkTipo+':'+t.linkId); }));
+  const igual=(t,fecha,monto)=>t.date===fecha && Math.abs((t.amount||0)-(monto||0))<0.01;
+  S.accounts.forEach((acc,idx)=>{
+    (acc.transactions||[]).forEach(t=>{
+      if(t.linkTipo || t.esTransferenciaInterna) return;
+      const d=t.desc||'';
+      let tipo=null,cand=null;
+      if(t.esDistribucion){
+        tipo='distribucion';
+        cand=S.distribuciones.find(x=>x.cuentaIdx===idx&&igual(t,x.fecha,x.monto)&&!usados.has('distribucion:'+x.id));
+        if(cand) { t.linkTipo=tipo; t.linkId=cand.id; usados.add(tipo+':'+cand.id); n++; }
+        return;
+      }
+      if(t.type==='egreso' && /^Egreso:/.test(d)){
+        tipo='egreso';
+        cand=S.egresos.find(e=>(e.fuente||'manual')==='manual'&&!e.esHistorico&&e.metodo!=='tarjeta'&&e.cuentaIdx===idx&&igual(t,e.fecha,e.monto)&&!usados.has('egreso:'+e.id));
+      } else if(t.type==='ingreso' && /^Ingreso:/.test(d)){
+        tipo='ingreso';
+        cand=S.ingresos.find(e=>(e.fuente||'manual')==='manual'&&!e.esHistorico&&e.cuentaIdx===idx&&igual(t,e.fecha,e.monto)&&!usados.has('ingreso:'+e.id));
+      } else if(/^Recibo EGR-REC-/.test(d)){
+        tipo='reciboEgreso';
+        cand=S.recibosEgreso.find(r=>d.startsWith('Recibo '+r.numero+':')&&!usados.has('reciboEgreso:'+r.id));
+      } else if(/^Recibo REC-/.test(d)){
+        tipo='recibo';
+        cand=S.recibos.find(r=>d.startsWith('Recibo '+r.numero+':')&&!usados.has('recibo:'+r.id));
+      } else if(t.type==='egreso' && /^CxP:/.test(d)){
+        tipo='cxpPago';
+        const e=S.egresos.find(e=>e.fuente==='cxp'&&!e.esHistorico&&e.cuentaIdx===idx&&igual(t,e.fecha,e.monto)&&!usados.has('cxpPago:'+e.fuenteId));
+        cand=e?{id:e.fuenteId}:null;
+      } else if(t.type==='ingreso' && /^CxC (Cobrada|Abono)/.test(d)){
+        tipo='cxcPago';
+        const e=S.ingresos.find(e=>e.fuente==='cxc'&&!e.esHistorico&&e.cuentaIdx===idx&&igual(t,e.fecha,e.monto)&&!usados.has('cxcPago:'+e.fuenteId));
+        cand=e?{id:e.fuenteId}:null;
+      }
+      if(tipo && cand){ t.linkTipo=tipo; t.linkId=cand.id; usados.add(tipo+':'+cand.id); n++; }
+    });
+  });
+  // Egresos de CxP y Ingresos de CxC: grabar el ID de la cuenta/factura de origen
+  S.egresos.forEach(e=>{
+    if(e.fuente!=='cxp' || e.fuenteItemId!=null) return;
+    for(const sec of ['proveedores','serviciosFijos','prestamos','otros']){
+      const it=(S.cuentasPagar[sec]||[]).find(i=>i.id===e.fuenteId || (i.pagos||[]).some(pg=>pg.id===e.fuenteId));
+      if(it){ e.fuenteItemId=it.id; e.fuenteSeccion=sec; n++; break; }
+    }
+  });
+  S.ingresos.forEach(i=>{
+    if(i.fuente!=='cxc' || i.facturaId!=null) return;
+    const f=facturaDeIngreso(i);
+    if(f){ i.facturaId=f.id; n++; }
+  });
+  return n;
+}
+
 function delTx(i,id){
   const t=(S.accounts[i]?.transactions||[]).find(x=>x.id===id);
-  const esVinculado = t && /^(Egreso:|Ingreso:|Recibo |CxP:|Transferencia (recibida|enviada))/.test(t.desc||'');
+  if(!t) return;
+  // Movimiento creado por un Ingreso/Egreso/Recibo/Distribución manual: se elimina desde su origen
+  // (así se borra el registro Y su movimiento juntos, sin dejar uno huérfano).
+  const delegar={ingreso:()=>delIngreso(t.linkId),egreso:()=>delEgreso(t.linkId),recibo:()=>delRecibo(t.linkId),reciboEgreso:()=>delReciboEgreso(t.linkId),distribucion:()=>delDistribucion(t.linkId)}[t.linkTipo];
+  const origenExiste = t.linkTipo==='ingreso'?S.ingresos.some(x=>x.id===t.linkId)
+    : t.linkTipo==='egreso'?S.egresos.some(x=>x.id===t.linkId)
+    : t.linkTipo==='recibo'?S.recibos.some(x=>x.id===t.linkId)
+    : t.linkTipo==='reciboEgreso'?S.recibosEgreso.some(x=>x.id===t.linkId)
+    : t.linkTipo==='distribucion'?S.distribuciones.some(x=>x.id===t.linkId) : false;
+  if(delegar && origenExiste){ delegar(); return; }
+  const origen=etiquetaOrigenTx(t);
+  const esVinculado = !!origen || (!t.linkTipo && /^(Egreso:|Ingreso:|Recibo |CxP:|Transferencia (recibida|enviada))/.test(t.desc||''));
   const msg = esVinculado
-    ? 'Este movimiento parece venir de un Ingreso/Egreso/CxC/CxP ya registrado. Si lo eliminas aquí, ese otro registro NO se actualizará ni se eliminará automáticamente — revísalo tú por separado si hace falta. ¿Continuar?'
+    ? `Este movimiento viene de ${origen||'un Ingreso/Egreso/CxC/CxP ya registrado'}. Si lo eliminas aquí, ese registro NO se actualizará ni se eliminará automáticamente — revísalo tú por separado si hace falta. ¿Continuar?`
     : '¿Eliminar este movimiento del historial bancario?';
   icgConfirm(msg,'Eliminar Movimiento','Eliminar',true).then(ok=>{
     if(!ok)return;
-    S.accounts[i].transactions=S.accounts[i].transactions.filter(x=>x.id!==id);
+    respaldoAuto('Antes de eliminar un movimiento');
+    quitarTx(i,id);
     save(); renderTx(i);
   });
 }
@@ -3865,7 +3960,7 @@ function addCCTx(){
   const cc=S.creditCard;
   const date=document.getElementById('cc-date').value;
   const type=document.getElementById('cc-type').value;
-  const amount=numVal('cc-amount');
+  const amount=r2(numVal('cc-amount'));
   const currency=document.getElementById('cc-currency')?.value||'RD$';
   const desc=document.getElementById('cc-desc').value.trim()||'(sin descripción)';
   const cat=document.getElementById('cc-cat')?.value||'';
@@ -3884,8 +3979,8 @@ function addCCTx(){
   if(type==='pago'&&currency==='RD$'){
     const li=Math.max(0,parseInt(cc.linkedAccountIdx)||0);
     if(li<S.accounts.length){
-      S.accounts[li].transactions.push({id:Date.now()+1,date,type:'egreso',method:'transferencia',amount,
-        desc:`Pago tarjeta: ${cc.name||'Tarjeta'} – ${desc}`});
+      S.accounts[li].transactions.push({id:Date.now()+1,date,type:'egreso',method:'transferencia',amount:r2(amount),
+        desc:`Pago tarjeta: ${cc.name||'Tarjeta'} – ${desc}`,linkTipo:'ccPago',linkId:txId});
       renderTx(li);
     }
   }
@@ -3904,21 +3999,26 @@ function ccEffectiveAvail(){
   const base = cc.initAvailRD !== undefined && cc.initAvailRD !== null ? cc.initAvailRD : (cc.availableRD||0);
   const cargos = cc.transactions.filter(t=>t.type==='cargo').reduce((s,t)=>s+t.amount,0);
   const pagos  = cc.transactions.filter(t=>t.type==='pago').reduce((s,t)=>s+t.amount,0);
-  return Math.max(0, base - cargos + pagos);
+  return Math.max(0, r2(base - cargos + pagos));
 }
 
 
 function delCCTx(id){
   const t=S.creditCard.transactions.find(x=>x.id===id);
   const egresoVinculado = t && t.egresoRef ? S.egresos.find(e=>e.id===t.egresoRef) : null;
+  const vincPago = (t && t.type==='pago') ? buscarTxVinculado('ccPago',id) : null;
   const msg = egresoVinculado
     ? `Este cargo viene de un Egreso de ${fmt(egresoVinculado.monto)} ya registrado. Al eliminarlo aquí, ese Egreso también se eliminará del Estado de Resultados. ¿Continuar?`
+    : vincPago ? `Este pago de tarjeta también debitó ${fmt(vincPago.tx.amount)} de <strong>${esc(S.accounts[vincPago.idx].name)}</strong>. Al eliminarlo, ese movimiento se elimina también y el saldo de la cuenta se recupera. ¿Continuar?`
     : '¿Eliminar este movimiento?';
   icgConfirm(msg,'Eliminar Movimiento','Eliminar',true).then(ok=>{
     if(!ok)return;
+    respaldoAuto('Antes de eliminar un movimiento de tarjeta');
     if(egresoVinculado) S.egresos=S.egresos.filter(e=>e.id!==egresoVinculado.id);
+    if(vincPago) quitarTx(vincPago.idx,vincPago.tx.id);
     S.creditCard.transactions=S.creditCard.transactions.filter(x=>x.id!==id);
     save(); updateCCCards(); renderCCTx(); renderEgresos();
+    if(vincPago){ try{ renderTx(vincPago.idx); renderConsolidated(); }catch(e){} }
   });
 }
 
@@ -3998,7 +4098,7 @@ function onPayMethodChange(sel){
   if(noteWrap){
     noteWrap.style.display = isEfectivo ? '' : 'none';
     const noteText=noteWrap.querySelector('div');
-    if(noteText) noteText.textContent = 'Este cobro se registra como efectivo recibido — no toca ninguna cuenta bancaria.';
+    if(noteText) noteText.textContent = 'Este cobro se registra como efectivo recibido — entra a Caja General, no a una cuenta bancaria.';
   }
 }
 
@@ -4414,8 +4514,8 @@ function cxcSt(x){
   if(x.due<today()) return 'vencida';
   return 'por_cobrar';
 }
-function cxcPaidSoFar(x){ return (x.pagos||[]).reduce((s,p)=>s+p.montoBruto,0); }
-function cxcPending(x){ return Math.max(0, x.amount - cxcPaidSoFar(x)); }
+function cxcPaidSoFar(x){ return (x.pagos||[]).reduce((s,p)=>s+Math.round((Number(p.montoBruto)||0)*100+1e-7),0)/100; }
+function cxcPending(x){ return Math.max(0, Math.round(((Number(x.amount)||0)-cxcPaidSoFar(x))*100+1e-7)/100); }
 // Una factura anulada nunca representa dinero pendiente por cobrar — se trata igual
 // que una pagada para efectos de KPIs, Flujo de Caja y listas de "pendientes".
 function cxcEstaResuelta(x){ return x.estado==='pagada' || x.estado==='anulada'; }
@@ -4424,7 +4524,9 @@ function cxcEstaResuelta(x){ return x.estado==='pagada' || x.estado==='anulada';
 // id de la factura misma, o al id de uno de sus pagos parciales/con retención). Devuelve null
 // si el Ingreso es una venta directa sin factura vinculada.
 function facturaDeIngreso(ing){
-  if(!ing || ing.fuenteId==null) return null;
+  if(!ing) return null;
+  if(ing.facturaId!=null){ const f=S.cuentasCobrar.find(c=>c.id===ing.facturaId); if(f) return f; }
+  if(ing.fuenteId==null) return null;
   const directa = S.cuentasCobrar.find(c=>c.id===ing.fuenteId);
   if(directa) return directa;
   for(const c of S.cuentasCobrar){
@@ -4530,8 +4632,7 @@ function openPayModal(id){
   document.getElementById('pay-ret-amount').readOnly=true;
   document.getElementById('pay-ret-amount').style.opacity='0.4';
   document.getElementById('pay-ret-display').textContent=fmt(0);
-  setMontoValue('pay-net-amount',pend);
-  document.getElementById('pay-net-display').textContent=fmt(pend);
+  calcPayNet();
   document.getElementById('pay-ref').value='';
   const sel=document.getElementById('pay-bank');
   sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${a.name}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`;
@@ -4542,7 +4643,7 @@ function openPayModal(id){
 }
 
 function calcPayNet(){
-  const montoAhora=numVal('pay-monto-ahora')||0;
+  const montoAhora=r2(numVal('pay-monto-ahora')||0);
   const retType=document.getElementById('pay-ret-type').value;
   const retInput=document.getElementById('pay-ret-amount');
   const retDisplay=document.getElementById('pay-ret-display');
@@ -4581,13 +4682,14 @@ function confirmPayment(){
   const bankSelVal=document.getElementById('pay-bank').value;
   const isEfectivo = method==='efectivo';
   const isHistorico = bankSelVal==='none';
-  const bankIdx=isHistorico?null:(parseInt(bankSelVal)||0);
+  const bankIdx=isHistorico?null:(isEfectivo?cajaGeneralIdx():(parseInt(bankSelVal)||0)); // efectivo entra a Caja General
   const ref=document.getElementById('pay-ref').value.trim();
   const montoAhora=numVal('pay-monto-ahora')||0;
-  const netAmount=numVal('pay-net-amount')||0;
   const retType=document.getElementById('pay-ret-type').value;
-  const retAmount=numVal('pay-ret-amount')||0;
+  const retAmount=retType==='ninguna'?0:r2(numVal('pay-ret-amount')||0);
+  const netAmount=r2(Math.max(0,montoAhora-retAmount)); // siempre calculado: cobrado − retención
   if(!date){notify('error','Fecha Requerida','Selecciona la fecha de cobro.');return;}
+  if(isHistorico && (x.issued||'')>=CUTOVER_V2){notify('error','Histórico No Permitido',`El modo Histórico solo aplica a facturas emitidas antes del 27/08/2026. Esta factura se emitió el ${fmtDate(x.issued)}: elige la cuenta donde entró el dinero.`);return;}
   if(montoAhora<=0){notify('error','Monto Inválido','El monto a cobrar debe ser mayor a cero.');return;}
   const pendienteActual=cxcPending(x);
   if(montoAhora>pendienteActual+0.009){notify('error','Monto Excedido',`Ingresado: ${fmt(montoAhora)} · Pendiente: ${fmt(pendienteActual)}`);return;}
@@ -4595,20 +4697,20 @@ function confirmPayment(){
 
   if(!x.pagos) x.pagos=[];
   const pagoId=Date.now()+Math.random();
-  x.pagos.push({id:pagoId,date,montoBruto:montoAhora,netAmount,method,bankIdx:(isEfectivo||isHistorico)?null:bankIdx,retType,retAmount,ref});
+  x.pagos.push({id:pagoId,date,montoBruto:montoAhora,netAmount,method,bankIdx:isHistorico?null:bankIdx,retType,retAmount,ref});
 
   const nuevoPendiente=cxcPending(x);
   const quedaSaldada = nuevoPendiente<=0.009;
   x.estado = quedaSaldada ? 'pagada' : 'parcial';
-  x.paidDate=date; x.payMethod=method; x.payBankIdx=(isEfectivo||isHistorico)?null:bankIdx;
+  x.paidDate=date; x.payMethod=method; x.payBankIdx=isHistorico?null:bankIdx;
   x.amountPaid=netAmount; x.retType=retType; x.retAmount=retAmount; x.payRef=ref;
 
   let desc=`CxC ${quedaSaldada?'Cobrada':'Abono'} – ${x.client} | Fact. ${x.invoice}`;
   if(retType!=='ninguna') desc+=` | Ret. ${retType.toUpperCase()}: -${fmt(retAmount)}`;
   if(ref) desc+=` | Ref: ${ref}`;
-  if(!isEfectivo && !isHistorico){
-    // Credit the bank account
-    pushTx(bankIdx,{id:Date.now(),date,type:'ingreso',method,amount:netAmount,desc,ref});
+  if(!isHistorico){
+    // Credit the bank account (o Caja General, si el cobro fue en efectivo)
+    pushTx(bankIdx,{id:Date.now(),date,type:'ingreso',method,amount:netAmount,desc,ref,linkTipo:'cxcPago',linkId:pagoId});
     renderTx(bankIdx);
   }
   save(); renderCXC(); closePayModal();
@@ -4616,10 +4718,10 @@ function confirmPayment(){
   // Histórico: mismo ingreso para el Estado de Resultados, pero sin tocar ninguna cuenta bancaria.
   // Cada abono es su propio ingreso — se identifica por el id del abono, no de la factura,
   // para que varios abonos a la misma factura no se pisen entre sí.
-  autoIngresoFromCxC(x, netAmount, date, method, (isEfectivo||isHistorico) ? null : bankIdx, isHistorico, montoAhora, pagoId, ref);
+  autoIngresoFromCxC(x, netAmount, date, method, isHistorico ? null : bankIdx, isHistorico, montoAhora, pagoId, ref);
   let detail=`Abono: ${fmt(montoAhora)}`;
   if(retType!=='ninguna') detail+=`<br>Retención (${retType.toUpperCase()}): -${fmt(retAmount)}`;
-  detail+=`<br>Cobrado: ${fmt(netAmount)} ${isHistorico?'· <b>Histórico (sin cuenta)</b>':isEfectivo?'· <b>Efectivo</b>':'→ '+esc(S.accounts[bankIdx]?.name)}`;
+  detail+=`<br>Cobrado: ${fmt(netAmount)} ${isHistorico?'· <b>Histórico (sin cuenta)</b>':isEfectivo?'→ <b>Efectivo · '+esc(S.accounts[bankIdx]?.name)+'</b>':'→ '+esc(S.accounts[bankIdx]?.name)}`;
   detail+= quedaSaldada ? `<br><strong style="color:#4ade80;">Factura completamente saldada</strong>` : `<br>Pendiente restante: <strong>${fmt(nuevoPendiente)}</strong>`;
   notify('success', quedaSaldada?'Factura Saldada':'Abono Registrado', detail);
 }
@@ -5516,8 +5618,142 @@ function deleteCXP(section, id){
 // ── Pay Modal ──
 let _cxpPayType = 'full'; // 'full' or 'partial'
 
-function cxpPaidSoFar(item){ return (item.pagos||[]).reduce((s,p)=>s+p.amount,0); }
-function cxpPending(item){ return Math.max(0, item.monto - cxpPaidSoFar(item)); }
+function cxpPaidSoFar(item){ return (item.pagos||[]).reduce((s,p)=>s+Math.round((Number(p.amount)||0)*100+1e-7),0)/100; }
+function cxpPending(item){ return Math.max(0, Math.round(((Number(item.monto)||0)-cxpPaidSoFar(item))*100+1e-7)/100); }
+
+// ══════════════════ MOTOR ÚNICO DE CÁLCULO (FIN) ══════════════════
+// Una sola fuente para las cifras que usan Balance General, Flujo de Caja, Verificación
+// Maestra y el Vigía del cuadre. Antes cada pantalla sumaba por su cuenta, con reglas
+// ligeramente distintas, y por eso podían discrepar. Ahora todas leen de aquí.
+// Las sumas se redondean al centavo al final (r2) para que no se arrastren restos de coma
+// flotante (0.1 + 0.2 = 0.30000000000000004), y lo que se GUARDA nuevo ya se redondea al escribir.
+function cents(n){ const v=Number(n); if(!isFinite(v)) return 0; return (v<0?-1:1)*Math.round(Math.abs(v)*100+1e-7); }
+function r2(n){ return cents(n)/100; }
+function sumC(arr,fn){ let t=0; for(const x of (arr||[])) t+=(Number(fn?fn(x):x)||0); return r2(t); }
+const FIN={
+  saldoCuenta(acc){ let c=Number(acc.initialBalance)||0; (acc.transactions||[]).forEach(t=>{ c+= t.type==='ingreso'?(Number(t.amount)||0):-(Number(t.amount)||0); }); return r2(c); },
+  saldoBancos(){ return sumC(S.accounts,a=>FIN.saldoCuenta(a)); },
+  saldoInicialBancos(){ return sumC(S.accounts,a=>a.initialBalance||0); },
+  // Ingreso sin ITBIS: el ITBIS cobrado no es ingreso, es dinero de la DGII.
+  ingresoNeto(x){ return r2(x.monto-(x.itbis||0)); },
+  // Egreso para el Balance (utilidades retenidas): sin ITBIS de compras (crédito fiscal), salvo la remesa a la DGII.
+  // Egreso que reduce las Utilidades Retenidas: sin ITBIS de compras (es crédito fiscal), y una remesa
+  // a la DGII NO es gasto: paga una deuda (baja "ITBIS por Pagar"), así que no toca la utilidad.
+  egresoBalance(x){ return x.categoria==='itbis' ? 0 : r2(x.monto-(x.itbis||0)); },
+  // Egreso en términos de efectivo (para el Efectivo No Bancarizado de lo marcado Histórico): aquí la
+  // remesa SÍ cuenta completa, porque ese dinero salió de la caja no bancarizada.
+  egresoCaja(x){ return r2(x.monto-(x.categoria!=='itbis'?(x.itbis||0):0)); },
+  cxcPendiente(){ return sumC(S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)),cxcPending); },
+  cxpPorSeccion(){
+    const o={};
+    ['proveedores','serviciosFijos','prestamos','otros'].forEach(sec=>{
+      o[sec]=sumC((S.cuentasPagar[sec]||[]).filter(x=>x.estado!=='pagada'),x=>sec==='prestamos'?(parseFloat(x.saldo)||0):cxpPending(x));
+    });
+    return o;
+  },
+  cxpTotal(){ const o=FIN.cxpPorSeccion(); return r2(o.proveedores+o.serviciosFijos+o.prestamos+o.otros); },
+  // Para cada factura aún abierta: cuánto de su ITBIS y de su neto YA se reconoció en los Ingresos
+  // generados por sus cobros (usando lo realmente guardado, no una fórmula): así cualquier redondeo
+  // al centavo hecho al registrar un abono queda absorbido y el Balance no se desfasa por 1 centavo.
+  facturasAbiertas(){
+    const porFactura=new Map();
+    S.ingresos.forEach(i=>{ if(i.fuente!=='cxc') return; const f=facturaDeIngreso(i); if(!f) return; (porFactura.get(f.id)||porFactura.set(f.id,[]).get(f.id)).push(i); });
+    return S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).map(x=>{
+      const ings=porFactura.get(x.id)||[];
+      const pagos=x.pagos||[];
+      let itbisCobrado=0, netoCobrado=0;
+      pagos.forEach(p=>{
+        const ing=ings.find(i=>i.fuenteId===p.id);
+        const bruto=Number(p.montoBruto)||0;
+        const itb = ing ? (Number(ing.itbis)||0) : (x.amount>0?(x.itbis||0)*bruto/x.amount:0);
+        itbisCobrado+=itb; netoCobrado+=bruto-itb;
+      });
+      return {x, diferido:Math.max(0,r2((x.subtotal||0)-netoCobrado)), itbisPendiente:Math.max(0,r2((x.itbis||0)-itbisCobrado))};
+    });
+  },
+  ingresosDiferidos(){ return sumC(FIN.facturasAbiertas(),f=>f.diferido); },
+  // Dinero que SÍ salió/entró en bancos según los registros de Ingresos/Egresos (bruto) — base de la Verificación Maestra.
+  esperadoBancos(){
+    const pasaPorBanco=x=>x.metodo!=='tarjeta'&&x.cuentaIdx!=null&&!!S.accounts[x.cuentaIdx];
+    const ing=sumC(S.ingresos.filter(x=>!x.esHistorico&&(x.cuentaIdx==null||!!S.accounts[x.cuentaIdx])),x=>x.monto);
+    const egr=sumC(S.egresos.filter(x=>!x.esHistorico&&pasaPorBanco(x)),x=>x.monto);
+    const tarj=sumC(S.egresos.filter(x=>!x.esHistorico&&!pasaPorBanco(x)),x=>x.monto);
+    let dist=0; S.accounts.forEach(acc=>(acc.transactions||[]).forEach(t=>{ if(t.esDistribucion) dist+=(Number(t.amount)||0); })); dist=r2(dist);
+    return {ing,egr,tarj,dist,esperado:r2(ing-egr-dist)};
+  },
+  balance(){
+    const saldoBancos=FIN.saldoBancos();
+    const cxcPendiente=FIN.cxcPendiente();
+    const inventario=0; // no se lleva inventario formal — confirmado con el usuario
+    const totalActivosFijos=sumC(S.activosFijos,x=>x.monto);
+    // Dinero "Histórico" (no toca bancos) sube el Capital vía Utilidades Retenidas; este Activo es su contraparte.
+    const historicoIngresosNeto=sumC(S.ingresos.filter(x=>x.esHistorico),FIN.ingresoNeto);
+    const historicoEgresosNeto=sumC(S.egresos.filter(x=>x.esHistorico),FIN.egresoCaja);
+    const efectivoNoBancarizado=r2(historicoIngresosNeto-historicoEgresosNeto);
+
+    const cxpTotal=FIN.cxpTotal();
+    // ITBIS: se causa al EMITIR la factura (DGII), no al cobrarla; solo facturas emitidas desde CUTOVER_V2.
+    const itbisDirectasPostApertura=sumC(S.ingresos.filter(x=>!x.esHistorico&&!facturaDeIngreso(x)),x=>x.itbis||0);
+    const itbisCxcPostApertura=sumC(S.cuentasCobrar.filter(c=>(c.issued||'')>=CUTOVER_V2),c=>c.itbis||0);
+    const itbisCausado=r2(itbisDirectasPostApertura+itbisCxcPostApertura);
+    const itbisCreditoFiscal=sumC(S.egresos.filter(x=>x.categoria!=='itbis'),x=>x.itbis||0);
+    const itbisRemesasPagadas=sumC(S.egresos.filter(x=>x.categoria==='itbis'),x=>x.monto);
+    const itbisPagado=r2(itbisCreditoFiscal+itbisRemesasPagadas);
+    const itbisPorPagar=Math.max(0,r2(itbisCausado-itbisPagado));
+    const creditoFiscalAFavor=Math.max(0,r2(itbisPagado-itbisCausado));
+    const totalActivos=r2(saldoBancos+cxcPendiente+inventario+totalActivosFijos+efectivoNoBancarizado+creditoFiscalAFavor);
+
+    const limitRD=S.creditCard.creditLimit||0;
+    const tarjetaAdeudado=Math.max(0,r2(limitRD-ccEffectiveAvail()));
+    const ingresosDiferidos=FIN.ingresosDiferidos();
+    const totalPasivos=r2(cxpTotal+itbisPorPagar+tarjetaAdeudado+ingresosDiferidos);
+
+    const saldosInicialesCuentas=FIN.saldoInicialBancos();
+    // "Corte de Balance": ajusta el saldo real de una cuenta sin pasar por Ingresos/Egresos → nuevo punto de partida de capital.
+    let ajC=0;
+    S.accounts.forEach(acc=>(acc.transactions||[]).forEach(t=>{ if(t.esAjusteCorte || (t.desc||'').startsWith('Ajuste de corte')) ajC+= t.type==='ingreso'?(Number(t.amount)||0):-(Number(t.amount)||0); }));
+    const ajustesDeCorte=r2(ajC);
+    const prestamosAperturaBHD=sumC(S.cuentasPagar.prestamos.filter(p=>{
+      const c=(p.concepto||'').trim().toUpperCase();
+      return (c.includes('TINTIN')||c.includes('PILY'))&&p.estado!=='pagada';
+    }),p=>parseFloat(p.saldo)||0);
+    const tarjetaAperturaAdeudo=Math.max(0,r2(limitRD-(S.creditCard.initAvailRD??S.creditCard.availableRD??0)));
+    const capitalAperturaTransicion=S.capitalAperturaTransicion||0; // valor FIJO, calculado una sola vez
+    // ITBIS de facturas emitidas ANTES del 27-ago-2026: ya resuelto en V1; el dinero cobrado lo trae adentro → capital de apertura.
+    const itbisPreAperturaPendiente=sumC(FIN.facturasAbiertas().filter(f=>(f.x.issued||'')<CUTOVER_V2),f=>f.itbisPendiente);
+    const itbisPreAperturaCobrado=sumC(S.ingresos.filter(i=>!i.esHistorico&&i.fuente==='cxc'),i=>{ const f=facturaDeIngreso(i); return (f&&(f.issued||'')<CUTOVER_V2)?(i.itbis||0):0; });
+    const itbisPreApertura=r2(itbisPreAperturaPendiente+itbisPreAperturaCobrado);
+    const capitalTitular=r2(totalActivosFijos+saldosInicialesCuentas+ajustesDeCorte-prestamosAperturaBHD-tarjetaAperturaAdeudo+capitalAperturaTransicion+itbisPreApertura);
+    const ingresosNetosHistoricos=sumC(S.ingresos,FIN.ingresoNeto);
+    const egresosHistoricos=sumC(S.egresos,FIN.egresoBalance);
+    const utilidadesRetenidas=r2(ingresosNetosHistoricos-egresosHistoricos);
+    const distribucionesHistoricas=sumC(S.distribuciones,x=>x.monto);
+    const totalCapital=r2(capitalTitular+utilidadesRetenidas-distribucionesHistoricas);
+    const diferencia=r2(totalActivos-(totalPasivos+totalCapital));
+    return {saldoBancos,cxcPendiente,inventario,totalActivosFijos,historicoIngresosNeto,historicoEgresosNeto,efectivoNoBancarizado,cxpTotal,
+      itbisDirectasPostApertura,itbisCxcPostApertura,itbisCausado,itbisCreditoFiscal,itbisRemesasPagadas,itbisPagado,itbisPorPagar,creditoFiscalAFavor,
+      totalActivos,limitRD,tarjetaAdeudado,ingresosDiferidos,totalPasivos,saldosInicialesCuentas,ajustesDeCorte,prestamosAperturaBHD,tarjetaAperturaAdeudo,
+      capitalAperturaTransicion,itbisPreAperturaPendiente,itbisPreAperturaCobrado,itbisPreApertura,capitalTitular,ingresosNetosHistoricos,egresosHistoricos,
+      utilidadesRetenidas,distribucionesHistoricas,totalCapital,diferencia};
+  },
+  // Cruce entre reportes: lo que Rentabilidad (Estado de Resultados) y el Balance deben cumplir siempre juntos.
+  // Utilidades Retenidas (Balance) = Utilidad del Estado de Resultados − remesas ITBIS − capital de préstamos devuelto.
+  cruceReportes(){
+    const ing=sumC(S.ingresos,FIN.ingresoNeto);
+    const gastoPL=sumC(S.egresos,montoGastoPL);
+    const utilPL=r2(ing-gastoPL);
+    const B=FIN.balance();
+    const dif=r2(B.utilidadesRetenidas-utilidadPLEnBalance(utilPL));
+    return {utilPL,utilBalance:B.utilidadesRetenidas,dif};
+  }
+};
+// Lo que separa la utilidad del Estado de Resultados de las Utilidades Retenidas del Balance:
+// remesas a la DGII y capital de préstamos (ambos salen de caja pero no son gasto).
+function utilidadPLEnBalance(utilPL){
+  const noGasto=sumC(S.egresos,x=>FIN.egresoBalance(x)-montoGastoPL(x));
+  return r2(utilPL-noGasto);
+}
+
 
 // ══════════════════ FLUJO DE CAJA (30 días, base efectivo) ══════════════════
 function guardarFlujoPlan(){
@@ -5535,16 +5771,11 @@ function renderFlujoCaja(){
   const limite = d30.toISOString().slice(0,10);
 
   // Saldo actual real de todas las cuentas bancarias (no incluye Tarjeta, que es pasivo, no efectivo disponible)
-  let saldoActual = 0;
-  S.accounts.forEach(acc=>{
-    let bal = acc.initialBalance||0;
-    (acc.transactions||[]).forEach(t=>{ bal += t.type==='ingreso' ? t.amount : -t.amount; });
-    saldoActual += bal;
-  });
+  const saldoActual = FIN.saldoBancos();
 
   // Cobros esperados de CxC — pendientes con vencimiento dentro de los próximos 30 días (incluye ya vencidas)
   const cxcEsperado = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x) && x.due<=limite).sort((a,b)=>a.due.localeCompare(b.due));
-  const totalCxC = cxcEsperado.reduce((s,x)=>s+cxcPending(x),0);
+  const totalCxC = sumC(cxcEsperado,cxcPending);
 
   // Pagos comprometidos de CxP — todas las secciones, pendiente real (ya descontando abonos), vencimiento dentro de 30 días
   const seccionLabels = {proveedores:'Proveedor',serviciosFijos:'Servicio Fijo',prestamos:'Préstamo',otros:'Otro'};
@@ -5559,12 +5790,12 @@ function renderFlujoCaja(){
     });
   });
   cxpComprometido.sort((a,b)=>(a.vence||'').localeCompare(b.vence||''));
-  const totalCxP = cxpComprometido.reduce((s,x)=>s+x._pendiente,0);
+  const totalCxP = sumC(cxpComprometido,x=>x._pendiente);
 
   const salarioPlan = S.flujoCajaPlan.salario||0;
   const distribPlan = S.flujoCajaPlan.distribucion||0;
-  const subtotalAntes = saldoActual + totalCxC - totalCxP;
-  const proyectado = subtotalAntes - salarioPlan - distribPlan;
+  const subtotalAntes = r2(saldoActual + totalCxC - totalCxP);
+  const proyectado = r2(subtotalAntes - salarioPlan - distribPlan);
 
   document.getElementById('flujo-kpis').innerHTML = `
     <div class="bcard" style="flex:1;min-width:150px;"><div class="bcard-label">Saldo Actual (Cuentas)</div><div class="bcard-value positive">${fmt(saldoActual)}</div></div>
@@ -5633,6 +5864,246 @@ function delActivoFijo(id){
   });
 }
 
+// ══════════════════ BITÁCORA · PAPELERA · RESPALDOS AUTOMÁTICOS ══════════════════
+// Todo se guarda en ESTE navegador (IndexedDB), aparte de los datos del sistema, para no hacer
+// crecer el documento de Firebase (que tiene un límite de tamaño por documento).
+//  • Bitácora: cada registro creado, modificado o eliminado, con fecha y hora. Se detecta comparando
+//    el estado antes/después de cada guardado, así que cubre TODAS las pantallas y reparaciones.
+//  • Papelera: lo eliminado se guarda completo (con lo que se eliminó junto) y se puede restaurar.
+//  • Respaldos automáticos: copias versionadas del sistema completo (cada hora de uso, al abrir, y
+//    antes de cada eliminación o restauración). Se conservan las últimas 24 + una por día (30 días).
+const ICGDB=(function(){
+  let dbp=null, roto=false;
+  function open(){
+    if(roto) return Promise.reject(new Error('sin IndexedDB'));
+    if(dbp) return dbp;
+    dbp=new Promise((res,rej)=>{
+      try{
+        const r=indexedDB.open('icg_financial_local',1);
+        r.onupgradeneeded=()=>{ const d=r.result; ['bitacora','papelera','respaldos'].forEach(n=>{ if(!d.objectStoreNames.contains(n)) d.createObjectStore(n,{keyPath:'id'}); }); };
+        r.onsuccess=()=>res(r.result);
+        r.onerror=()=>{ roto=true; rej(r.error); };
+        r.onblocked=()=>{ roto=true; rej(new Error('blocked')); };
+      }catch(e){ roto=true; rej(e); }
+    });
+    return dbp;
+  }
+  const tx=(store,mode,fn)=>open().then(d=>new Promise((res,rej)=>{
+    const t=d.transaction(store,mode); const rq=fn(t.objectStore(store));
+    t.oncomplete=()=>res(rq?rq.result:undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error);
+  }));
+  return {
+    put:(s,v)=>tx(s,'readwrite',o=>o.put(v)).catch(()=>{}),
+    all:s=>tx(s,'readonly',o=>o.getAll()).catch(()=>[]),
+    get:(s,id)=>tx(s,'readonly',o=>o.get(id)).catch(()=>undefined),
+    del:(s,id)=>tx(s,'readwrite',o=>o.delete(id)).catch(()=>{})
+  };
+})();
+
+let _bitacora=[], _papelera=[], _respaldos=[]; // _respaldos: solo metadatos (el contenido se lee al restaurar)
+const _respMem=new Map(); // respaldo en memoria si IndexedDB no está disponible (últimos 5)
+let _bitBase=new Map(), _bitCtx='', _ultimoRespaldoTs=0, _bitTimer=null;
+
+function _bitSpecs(){
+  const sp=[];
+  const A=(k,label,arr,o)=>sp.push({k,label,arr,...o});
+  const ord=a=>a.sort((x,y)=>(x.fecha||x.date||'').localeCompare(y.fecha||y.date||''));
+  A('ingresos','Ingreso',()=>S.ingresos,{fp:o=>[o.monto,o.itbis,o.fecha,o.categoria,o.cuentaIdx,o.esHistorico,o.metodo].join('|'),desc:o=>[o.clienteNombre,o.desc].filter(Boolean).join(' · '),monto:o=>o.monto,fecha:o=>o.fecha,sort:ord});
+  A('egresos','Egreso',()=>S.egresos,{fp:o=>[o.monto,o.itbis,o.fecha,o.categoria,o.cuentaIdx,o.esHistorico,o.metodo].join('|'),desc:o=>[o.suplidorNombre,o.desc].filter(Boolean).join(' · '),monto:o=>o.monto,fecha:o=>o.fecha,sort:ord});
+  A('recibos','Recibo de ingreso',()=>S.recibos,{fp:o=>[o.monto,o.fecha,o.categoria].join('|'),desc:o=>[o.numero,o.clienteNombre].filter(Boolean).join(' · '),monto:o=>o.monto,fecha:o=>o.fecha,sort:ord});
+  A('recibosEgreso','Recibo de egreso',()=>S.recibosEgreso,{fp:o=>[o.monto,o.fecha,o.categoria].join('|'),desc:o=>[o.numero,o.suplidorNombre].filter(Boolean).join(' · '),monto:o=>o.monto,fecha:o=>o.fecha,sort:ord});
+  A('distribuciones','Distribución de utilidades',()=>S.distribuciones,{fp:o=>[o.monto,o.fecha,o.cuentaIdx].join('|'),desc:o=>o.ref||'',monto:o=>o.monto,fecha:o=>o.fecha,sort:ord});
+  A('cuentasCobrar','Factura de venta',()=>S.cuentasCobrar,{fp:o=>[o.amount,o.estado,o.issued,o.due,o.categoria,(o.pagos||[]).length,sumC(o.pagos||[],p=>p.montoBruto)].join('|'),desc:o=>[o.invoice,o.client].filter(Boolean).join(' · '),monto:o=>o.amount,fecha:o=>o.issued});
+  ['proveedores','serviciosFijos','prestamos','otros'].forEach(sec=>A('cxp|'+sec,'Cuenta por pagar ('+sec+')',()=>S.cuentasPagar[sec],{fp:o=>[o.monto,o.saldo,o.estado,o.vence,(o.pagos||[]).length].join('|'),desc:o=>[o.nombre,o.concepto].filter(Boolean).join(' · '),monto:o=>o.monto,fecha:o=>o.fecha}));
+  A('activosFijos','Activo fijo',()=>S.activosFijos,{fp:o=>[o.monto,o.fecha,o.nombre].join('|'),desc:o=>o.nombre,monto:o=>o.monto,fecha:o=>o.fecha});
+  A('clientes','Cliente',()=>S.clientes,{fp:o=>o.nombre,desc:o=>o.nombre,monto:()=>null,fecha:()=>''});
+  A('suplidores','Suplidor',()=>S.suplidores,{fp:o=>o.nombre,desc:o=>o.nombre,monto:()=>null,fecha:()=>''});
+  S.accounts.forEach((a,i)=>A('tx|'+i,'Movimiento bancario · '+(a.name||('Cuenta '+(i+1))),()=>S.accounts[i].transactions,{fp:o=>[o.amount,o.date,o.type].join('|'),desc:o=>o.desc||'',monto:o=>o.amount,fecha:o=>o.date,sort:ord}));
+  A('cc','Movimiento de tarjeta',()=>S.creditCard.transactions,{fp:o=>[o.amount,o.date,o.type].join('|'),desc:o=>o.desc||'',monto:o=>o.amount,fecha:o=>o.date,sort:ord});
+  return sp;
+}
+const _bitCamposCambio=['monto','amount','itbis','fecha','date','issued','due','vence','categoria','estado','metodo','cuentaIdx','saldo','nombre'];
+function _bitDiffTexto(a,b){
+  const out=[];
+  _bitCamposCambio.forEach(c=>{
+    if(a[c]!==undefined||b[c]!==undefined){
+      if(String(a[c])!==String(b[c])){
+        const num=typeof b[c]==='number'||typeof a[c]==='number';
+        out.push(`${c}: ${num&&a[c]!=null?fmt(a[c]):a[c]??'—'} → ${num&&b[c]!=null?fmt(b[c]):b[c]??'—'}`);
+      }
+    }
+  });
+  if((a.pagos||[]).length!==(b.pagos||[]).length) out.push(`pagos: ${(a.pagos||[]).length} → ${(b.pagos||[]).length}`);
+  return out.join('; ')||'cambio interno';
+}
+function _bitSnapshotMapa(){
+  const m=new Map();
+  _bitSpecs().forEach(sp=>(sp.arr()||[]).forEach(o=>{ m.set(sp.k+'#'+o.id,{k:sp.k,label:sp.label,fp:sp.fp(o),desc:sp.desc(o),monto:sp.monto(o),fecha:sp.fecha(o),obj:structuredClone(o)}); }));
+  return m;
+}
+// Fija el "antes" sin registrar nada (al abrir, al llegar datos de otro dispositivo, al importar o restaurar).
+function bitacoraRebase(){ try{ _bitBase=_bitSnapshotMapa(); }catch(e){ console.warn('bitacoraRebase',e); } }
+function bitacoraAhora(){
+  clearTimeout(_bitTimer);
+  let specs; try{ specs=_bitSpecs(); }catch(e){ return; }
+  const nuevo=new Map(), altas=[], cambios=[], bajas=[];
+  specs.forEach(sp=>(sp.arr()||[]).forEach(o=>{
+    const key=sp.k+'#'+o.id, fp=sp.fp(o), prev=_bitBase.get(key);
+    if(!prev){ const e={k:sp.k,label:sp.label,fp,desc:sp.desc(o),monto:sp.monto(o),fecha:sp.fecha(o),obj:structuredClone(o)}; nuevo.set(key,e); altas.push(e); }
+    else if(prev.fp!==fp){ const e={k:sp.k,label:sp.label,fp,desc:sp.desc(o),monto:sp.monto(o),fecha:sp.fecha(o),obj:structuredClone(o)}; nuevo.set(key,e); cambios.push({prev,e}); }
+    else nuevo.set(key,prev);
+  }));
+  _bitBase.forEach((v,key)=>{ if(!nuevo.has(key)) bajas.push(v); });
+  _bitBase=nuevo;
+  if(!altas.length&&!cambios.length&&!bajas.length) return;
+  const ts=Date.now(); let n=0;
+  const reg=(accion,e,extra)=>{ _bitPush({id:ts*1000+(n++),ts,accion,tipo:e.label,detalle:(e.desc||'')+(extra?(e.desc?' — ':'')+extra:''),monto:e.monto,fecha:e.fecha}); };
+  altas.forEach(e=>reg(_bitCtx||'Creó',e));
+  cambios.forEach(({prev,e})=>reg('Modificó',e,_bitDiffTexto(prev.obj,e.obj)));
+  bajas.forEach(e=>reg('Eliminó',e));
+  if(bajas.length){
+    const ev={id:ts,ts,resumen:`${bajas[0].label}${bajas[0].desc?': '+bajas[0].desc:''}${bajas[0].monto!=null?' — '+fmt(bajas[0].monto):''}`+(bajas.length>1?` (y ${bajas.length-1} registro(s) eliminado(s) junto con él)`:''),items:bajas.map(e=>({k:e.k,label:e.label,desc:e.desc,monto:e.monto,fecha:e.fecha,obj:e.obj}))};
+    _papelera.unshift(ev); ICGDB.put('papelera',ev);
+    // la papelera guarda 60 días o 100 eventos
+    const limite=ts-60*86400000;
+    _papelera.filter((x,i)=>i>=100||x.ts<limite).forEach(x=>ICGDB.del('papelera',x.id));
+    _papelera=_papelera.filter((x,i)=>i<100&&x.ts>=limite);
+  }
+  _bitCtx='';
+  if(_currentTabIdx==='bitacora') try{ renderBitacora(); }catch(e){}
+}
+function _bitPush(e){
+  _bitacora.unshift(e); ICGDB.put('bitacora',e);
+  if(_bitacora.length>1500){ _bitacora.splice(1500).forEach(x=>ICGDB.del('bitacora',x.id)); }
+}
+function programarBitacora(){ clearTimeout(_bitTimer); _bitTimer=setTimeout(()=>{ bitacoraAhora(); respaldoAuto('Automático (cada hora de uso)',{min:60}); },500); }
+
+// ── Respaldos ──
+function respaldoAuto(motivo,opts={}){
+  const min=opts.min!=null?opts.min:10, now=Date.now();
+  if(now-_ultimoRespaldoTs<min*60000) return false;
+  let json; try{ json=JSON.stringify(S); }catch(e){ return false; }
+  _ultimoRespaldoTs=now;
+  const resumen={ingresos:S.ingresos.length,egresos:S.egresos.length,facturas:S.cuentasCobrar.length,bancos:FIN.saldoBancos(),kb:Math.round(json.length/1024)};
+  const meta={id:now,ts:now,motivo,resumen};
+  _respaldos.unshift(meta);
+  ICGDB.put('respaldos',{...meta,json});
+  _respMem.set(now,json); if(_respMem.size>5){ _respMem.delete(_respMem.keys().next().value); }
+  podarRespaldos();
+  if(_currentTabIdx==='bitacora') try{ renderBitacora(); }catch(e){}
+  return true;
+}
+function podarRespaldos(){
+  const dia=t=>new Date(t).toISOString().slice(0,10);
+  const orden=[..._respaldos].sort((a,b)=>b.ts-a.ts);
+  const keep=new Set(orden.slice(0,24).map(x=>x.id));
+  const vistos=new Set(orden.slice(0,24).map(x=>dia(x.ts)));
+  const limite=Date.now()-30*86400000;
+  orden.slice(24).forEach(x=>{ const d=dia(x.ts); if(x.ts>=limite && !vistos.has(d)){ keep.add(x.id); vistos.add(d); } });
+  _respaldos.filter(x=>!keep.has(x.id)).forEach(x=>{ ICGDB.del('respaldos',x.id); _respMem.delete(x.id); });
+  _respaldos=_respaldos.filter(x=>keep.has(x.id));
+}
+async function _leerRespaldo(id){
+  const r=await ICGDB.get('respaldos',id);
+  if(r&&r.json) return r.json;
+  return _respMem.get(id)||null;
+}
+function crearRespaldoManual(){
+  respaldoAuto('Manual',{min:0});
+  notify('success','Respaldo Creado','Se guardó una copia completa del sistema en este navegador.');
+}
+async function descargarRespaldoGuardado(id){
+  const json=await _leerRespaldo(id); if(!json){ notify('error','No Disponible','No se pudo leer ese respaldo.'); return; }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+  a.download=`ICG_Financial_PRO_Respaldo_${new Date(id).toISOString().slice(0,16).replace(/[:T]/g,'-')}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+async function restaurarRespaldo(id){
+  const json=await _leerRespaldo(id); if(!json){ notify('error','No Disponible','No se pudo leer ese respaldo.'); return; }
+  const meta=_respaldos.find(x=>x.id===id);
+  const ok=await icgConfirm(`Vas a volver el sistema completo al estado del <strong>${_fmtMomento(id)}</strong>${meta?` (${meta.motivo})`:''}. Todo lo registrado DESPUÉS de ese momento se perderá. Antes de hacerlo se guarda una copia del estado actual, por si cambias de idea. ¿Continuar?`,'Restaurar Respaldo','Restaurar');
+  if(!ok) return;
+  bitacoraAhora(); respaldoAuto('Antes de restaurar un respaldo',{min:0});
+  let data; try{ data=JSON.parse(json); }catch(e){ notify('error','Respaldo Dañado','No se pudo leer ese respaldo.'); return; }
+  S=data; ensureEstadoIntegro(); migrarVinculosPorId(); bitacoraRebase();
+  _bitPush({id:Date.now()*1000,ts:Date.now(),accion:'Restauró respaldo',tipo:'Sistema completo',detalle:`Volvió al estado del ${_fmtMomento(id)}`,monto:null,fecha:''});
+  save(); reRenderAll();
+  notify('success','Respaldo Restaurado',`El sistema volvió al estado del ${_fmtMomento(id)}.`);
+}
+
+// ── Papelera ──
+async function restaurarDePapelera(id){
+  const ev=_papelera.find(e=>e.id===id); if(!ev) return;
+  const ok=await icgConfirm(`Se restaurará: <strong>${esc(ev.resumen)}</strong>.<br><br>Vuelve a quedar exactamente como estaba (incluyendo lo que se eliminó junto con él).`,'Restaurar de la Papelera','Restaurar',false);
+  if(!ok) return;
+  bitacoraAhora(); respaldoAuto('Antes de restaurar de la papelera',{min:5});
+  let n=0; const specs=_bitSpecs();
+  ev.items.forEach(it=>{
+    const sp=specs.find(x=>x.k===it.k); if(!sp) return;
+    const arr=sp.arr(); if(!arr || arr.some(o=>o.id===it.obj.id)) return;
+    arr.push(structuredClone(it.obj)); if(sp.sort) sp.sort(arr); n++;
+  });
+  _papelera=_papelera.filter(e=>e.id!==id); ICGDB.del('papelera',id);
+  _bitCtx='Restauró';
+  save(); reRenderAll(); bitacoraAhora();
+  notify('success','Restaurado',`${n} registro(s) devuelto(s) a su lugar.`);
+}
+async function vaciarPapelera(){
+  const ok=await icgConfirm('¿Vaciar la papelera? Lo que hay en ella ya no se podrá restaurar (la bitácora y los respaldos no se tocan).','Vaciar Papelera','Vaciar');
+  if(!ok) return;
+  _papelera.forEach(e=>ICGDB.del('papelera',e.id)); _papelera=[]; renderBitacora();
+}
+
+async function bitacoraCargar(){
+  const [b,p,r]=await Promise.all([ICGDB.all('bitacora'),ICGDB.all('papelera'),ICGDB.all('respaldos')]);
+  // lo que ya se generó en esta sesión antes de terminar de leer se conserva
+  const idsB=new Set(_bitacora.map(x=>x.id)); b.forEach(x=>{ if(!idsB.has(x.id)) _bitacora.push(x); });
+  _bitacora.sort((x,y)=>y.id-x.id);
+  const idsP=new Set(_papelera.map(x=>x.id)); p.forEach(x=>{ if(!idsP.has(x.id)) _papelera.push(x); });
+  _papelera.sort((x,y)=>y.ts-x.ts);
+  const idsR=new Set(_respaldos.map(x=>x.id)); r.forEach(({json,...meta})=>{ if(!idsR.has(meta.id)) _respaldos.push(meta); });
+  _respaldos.sort((x,y)=>y.ts-x.ts);
+  if(_respaldos.length) _ultimoRespaldoTs=Math.max(_ultimoRespaldoTs,_respaldos[0].ts);
+  // Al abrir: una copia si la última tiene más de 6 horas
+  respaldoAuto('Automático al abrir el sistema',{min:360});
+  if(_currentTabIdx==='bitacora') renderBitacora();
+}
+function iniciarBitacora(){
+  bitacoraRebase();
+  bitacoraCargar();
+}
+
+let _bitFiltro='';
+function renderBitacora(){
+  const el=document.getElementById('bit-contenido'); if(!el) return;
+  const fm=ts=>_fmtMomento(ts);
+  const colorAccion=a=>/Elimin/.test(a)?'#ef4444':/Modific/.test(a)?'#fdc901':/Restaur/.test(a)?'#22d3ee':'#4ade80';
+  const filas=_bitacora.filter(x=>!_bitFiltro||x.accion.startsWith(_bitFiltro)).slice(0,300);
+  el.innerHTML=`
+  <div class="transactions-section" style="margin-bottom:24px;">
+    <h3>🗑️ Papelera (se conserva 60 días)</h3>
+    <div class="table-wrap"><table><thead><tr><th>Eliminado</th><th>Qué era</th><th></th></tr></thead><tbody>
+    ${_papelera.length?_papelera.map(e=>`<tr><td class="td-mono">${fm(e.ts)}</td><td>${esc(e.resumen)}</td><td style="white-space:nowrap;"><button class="btn btn-primary" onclick="restaurarDePapelera(${e.id})">Restaurar</button></td></tr>`).join(''):'<tr><td colspan="3"><div class="empty-state">La papelera está vacía.</div></td></tr>'}
+    </tbody></table></div>
+    ${_papelera.length?'<div style="margin-top:10px;"><button class="btn" onclick="vaciarPapelera()">Vaciar papelera</button></div>':''}
+  </div>
+  <div class="transactions-section" style="margin-bottom:24px;">
+    <h3>💾 Respaldos automáticos (en este navegador)</h3>
+    <p style="font-size:14px;color:#8899bb;margin:0 0 10px;">Se crean solos cada hora de uso, al abrir el sistema y justo antes de cada eliminación o restauración. Guardan las últimas 24 copias y una por día durante 30 días. <strong>No reemplazan</strong> tu respaldo exportado: guarda también uno en tu computadora de vez en cuando.</p>
+    <div style="margin-bottom:10px;"><button class="btn btn-primary" onclick="crearRespaldoManual()">Crear respaldo ahora</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha y hora</th><th>Motivo</th><th>Contenido</th><th></th></tr></thead><tbody>
+    ${_respaldos.length?_respaldos.slice(0,40).map(r=>`<tr><td class="td-mono">${fm(r.ts)}</td><td>${esc(r.motivo)}</td><td style="color:#8899bb;">${r.resumen.ingresos} ingresos · ${r.resumen.egresos} egresos · ${r.resumen.facturas} facturas · bancos ${fmt(r.resumen.bancos)} · ${r.resumen.kb} KB</td><td style="white-space:nowrap;"><button class="btn btn-primary" onclick="restaurarRespaldo(${r.id})">Restaurar</button> <button class="btn" onclick="descargarRespaldoGuardado(${r.id})">Descargar</button></td></tr>`).join(''):'<tr><td colspan="4"><div class="empty-state">Todavía no hay respaldos automáticos.</div></td></tr>'}
+    </tbody></table></div>
+  </div>
+  <div class="transactions-section">
+    <h3>📜 Bitácora de cambios</h3>
+    <div style="margin-bottom:10px;"><select onchange="_bitFiltro=this.value;renderBitacora()"><option value="">Todo</option>${['Creó','Modificó','Eliminó','Restauró'].map(a=>`<option value="${a}" ${_bitFiltro===a?'selected':''}>${a}</option>`).join('')}</select></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha y hora</th><th>Acción</th><th>Qué</th><th>Detalle</th><th>Monto</th></tr></thead><tbody>
+    ${filas.length?filas.map(x=>`<tr><td class="td-mono">${fm(x.ts)}</td><td style="color:${colorAccion(x.accion)};font-weight:600;">${esc(x.accion)}</td><td>${esc(x.tipo)}</td><td style="max-width:420px;">${esc(x.detalle)}</td><td class="td-mono">${x.monto!=null?fmt(x.monto):'—'}</td></tr>`).join(''):'<tr><td colspan="5"><div class="empty-state">Aún no hay cambios registrados. Desde ahora, cada registro nuevo, cambio o eliminación queda aquí.</div></td></tr>'}
+    </tbody></table></div>
+  </div>`;
+}
+
 // ══════════════════ VIGÍA DEL CUADRE ══════════════════
 // El sistema revisa solo, después de cada guardado, si el Balance General sigue cuadrando.
 // Así no hay que entrar a mirar el aviso después de cada registro: si un registro lo descuadra,
@@ -5697,105 +6168,8 @@ function vigiaCuadre(){
 }
 
 function renderBalanceGeneral(){
-  // ── ACTIVOS ──
-  let saldoBancos=0;
-  S.accounts.forEach(acc=>{
-    let bal=acc.initialBalance||0;
-    (acc.transactions||[]).forEach(t=>{ bal += t.type==='ingreso' ? t.amount : -t.amount; });
-    saldoBancos+=bal;
-  });
-  const cxcPendiente = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).reduce((s,x)=>s+cxcPending(x),0);
-  const inventario = 0; // no se lleva inventario formal — confirmado con el usuario
-  const totalActivosFijos = S.activosFijos.reduce((s,x)=>s+x.monto,0);
-  // Dinero marcado como "Histórico" (no toca ninguna cuenta bancaria a propósito) sí sube el
-  // Capital vía Utilidades Retenidas — sin este Activo, ese dinero quedaría "flotando" sin
-  // ninguna contraparte, descuadrando el Balance para siempre (nunca se resuelve solo, a
-  // diferencia de CxC/CxP pendientes). Este Activo representa ese efectivo/valor no bancarizado.
-  const historicoIngresosNeto = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.itbis||0),0);
-  const historicoEgresosNeto = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
-  const efectivoNoBancarizado = historicoIngresosNeto - historicoEgresosNeto;
-  // (totalActivos se termina de calcular más abajo, después de creditoFiscalAFavor —
-  // ese Activo depende de datos de Egresos y CxC que se procesan en la sección de Pasivos.)
-
-  // ── PASIVOS ──
-  let cxpTotal=0;
-  ['proveedores','serviciosFijos','otros'].forEach(section=>{
-    S.cuentasPagar[section].forEach(item=>{ if(item.estado!=='pagada') cxpTotal += cxpPending(item); });
-  });
-  S.cuentasPagar.prestamos.forEach(item=>{ if(item.estado!=='pagada') cxpTotal += parseFloat(item.saldo)||0; }); // saldo real de capital, no la cuota
-  // El ITBIS se causa (se le debe a la DGII) el mes en que se EMITE la factura — no cuando el
-  // cliente la paga (así lo exige la DGII), y no tiene relación con la fecha de cobro. Por eso
-  // esto se calcula directamente sobre las facturas de CxC (cobradas O pendientes) emitidas
-  // desde el 27-ago-2026 — nunca sobre los Ingresos ya cobrados. Las facturas emitidas ANTES de
-  // esa fecha (históricas, o ya cobradas dentro de la V2.0 pero facturadas en la V1) ya
-  // resolvieron su ITBIS en su momento y jamás vuelven a contar aquí, sin importar cuándo se
-  // termine de cobrar el dinero.
-  const itbisDirectasPostApertura = S.ingresos.filter(x=>!x.esHistorico && !facturaDeIngreso(x)).reduce((s,x)=>s+(x.itbis||0),0);
-  const itbisCxcPostApertura = S.cuentasCobrar.filter(c=>(c.issued||'')>=CUTOVER_V2).reduce((s,c)=>s+(c.itbis||0),0);
-  const itbisCausado = itbisDirectasPostApertura + itbisCxcPostApertura;
-  // Dos cosas distintas que ambas reducen lo que le debes a la DGII:
-  // 1) Crédito fiscal — el ITBIS que TÚ pagaste en tus propias compras (egresos con ITBIS
-  //    marcado, que no sean la remisión misma a la DGII).
-  // 2) Remisiones ya pagadas — el efectivo que ya le mandaste directo a la DGII.
-  const itbisCreditoFiscal = S.egresos.filter(x=>x.categoria!=='itbis').reduce((s,x)=>s+(x.itbis||0),0);
-  const itbisRemesasPagadas = S.egresos.filter(x=>x.categoria==='itbis').reduce((s,x)=>s+x.monto,0);
-  const itbisPagado = itbisCreditoFiscal + itbisRemesasPagadas;
-  const itbisPorPagar = Math.max(0, itbisCausado - itbisPagado);
-  // Cuando lo que has pagado en ITBIS de tus compras es MÁS que el ITBIS que has causado en tus
-  // ventas de la V2.0 (por ejemplo, todavía no has facturado nada nuevo con ITBIS), ese exceso
-  // no se pierde — se convierte en un crédito a tu favor ante la DGII, que se va aplicando en
-  // cuanto empieces a causar ITBIS en ventas nuevas.
-  const creditoFiscalAFavor = Math.max(0, itbisPagado - itbisCausado);
-  const totalActivos = saldoBancos + cxcPendiente + inventario + totalActivosFijos + efectivoNoBancarizado + creditoFiscalAFavor;
-  const limitRD = S.creditCard.creditLimit||0;
-  const tarjetaAdeudado = Math.max(0, limitRD - ccEffectiveAvail());
-  // Ingresos Diferidos: mientras una factura de CxC siga pendiente de cobro, su parte neta
-  // (sin ITBIS) todavía no es "utilidad" tuya bajo base efectivo — es un Pasivo temporal que
-  // compensa el Activo de la Cuenta por Cobrar, y se cancela solo, automáticamente, en cuanto
-  // cobres la factura (en ese momento nace el Ingreso real que la reemplaza).
-  const ingresosDiferidos = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).reduce((s,x)=>s+(x.subtotal||0),0);
-  const totalPasivos = cxpTotal + itbisPorPagar + tarjetaAdeudado + ingresosDiferidos;
-
-  // ── CAPITAL ──
-  const saldosInicialesCuentas = S.accounts.reduce((s,acc)=>s+(acc.initialBalance||0),0);
-  // "Corte de Balance" ajusta el saldo real de una cuenta sin pasar por Ingresos/Egresos — sin
-  // esto, ese ajuste queda flotando en Activos sin contraparte en Capital, descuadrando el
-  // Balance. Se trata como lo que realmente es: un nuevo punto de partida de capital, igual que
-  // los Saldos Iniciales de Cuentas.
-  let ajustesDeCorte=0;
-  S.accounts.forEach(acc=>{
-    (acc.transactions||[]).forEach(t=>{
-      if((t.desc||'').startsWith('Ajuste de corte')){
-        ajustesDeCorte += t.type==='ingreso' ? t.amount : -t.amount;
-      }
-    });
-  });
-  const prestamosAperturaBHD = S.cuentasPagar.prestamos.filter(p=>{
-    const c=(p.concepto||'').trim().toUpperCase();
-    return (c.includes('TINTIN')||c.includes('PILY'))&&p.estado!=='pagada';
-  }).reduce((s,p)=>s+(parseFloat(p.saldo)||0),0);
-  // Mismo problema que resolvimos con los préstamos: si le pones a la Tarjeta el "monto
-  // adeudado a la fecha" como punto de partida (en vez de construirlo desde cero con Cargos y
-  // Pagos), esa deuda de apertura sube el Pasivo pero nada en el Capital la compensaba — se
-  // trata igual que la deuda de apertura de los préstamos.
-  const tarjetaAperturaAdeudo = Math.max(0, limitRD - (S.creditCard.initAvailRD ?? S.creditCard.availableRD ?? 0));
-  // Capital de Apertura — Transición V1→V2.0: ver el comentario junto a S.capitalAperturaTransicion
-  // en defaultState(). Es un valor FIJO, calculado una sola vez — nunca se recalcula aquí.
-  const capitalAperturaTransicion = S.capitalAperturaTransicion||0;
-  const capitalTitular = totalActivosFijos + saldosInicialesCuentas + ajustesDeCorte - prestamosAperturaBHD - tarjetaAperturaAdeudo + capitalAperturaTransicion; // Balance de apertura: máquinas + efectivo inicial + ajustes de corte + transición V1→V2.0, menos deuda (préstamos y tarjeta) que ya existía en ese momento
-  const ingresosNetosHistoricos = S.ingresos.reduce((s,x)=>s+x.monto-( x.itbis||0),0);
-  // El ITBIS que pagas en tus COMPRAS (crédito fiscal) no es un gasto real tuyo — ya lo estás
-  // recuperando reduciendo lo que le debes a la DGII (ver itbisCreditoFiscal arriba). Antes se
-  // contaba dos veces: una vez bajando el Pasivo (correcto) y otra vez bajando tu Utilidad como
-  // si de verdad lo hubieras gastado (incorrecto). Se excluye aquí, igual que ya se excluye del
-  // lado de Ingresos — simétrico. Las remesas pagadas directo a la DGII (categoria==='itbis')
-  // no aplican esta resta, porque ESAS sí son la salida de efectivo real, sin nada que recuperar.
-  const egresosHistoricos = S.egresos.reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
-  const utilidadesRetenidas = ingresosNetosHistoricos - egresosHistoricos;
-  const distribucionesHistoricas = S.distribuciones.reduce((s,x)=>s+x.monto,0);
-  const totalCapital = capitalTitular + utilidadesRetenidas - distribucionesHistoricas;
-
-  const diferencia = totalActivos - (totalPasivos + totalCapital);
+  // Todas las cifras vienen del motor único FIN.balance() (ver arriba) — esta pantalla solo las muestra.
+  const {saldoBancos,cxcPendiente,inventario,totalActivosFijos,historicoIngresosNeto,historicoEgresosNeto,efectivoNoBancarizado,cxpTotal,itbisDirectasPostApertura,itbisCxcPostApertura,itbisCausado,itbisCreditoFiscal,itbisRemesasPagadas,itbisPagado,itbisPorPagar,creditoFiscalAFavor,totalActivos,limitRD,tarjetaAdeudado,ingresosDiferidos,totalPasivos,saldosInicialesCuentas,ajustesDeCorte,prestamosAperturaBHD,tarjetaAperturaAdeudo,capitalAperturaTransicion,itbisPreAperturaPendiente,itbisPreAperturaCobrado,itbisPreApertura,capitalTitular,ingresosNetosHistoricos,egresosHistoricos,utilidadesRetenidas,distribucionesHistoricas,totalCapital,diferencia}=FIN.balance();
 
   document.getElementById('bg-columnas').innerHTML = `
     <div class="add-form" style="margin-bottom:0;">
@@ -5819,7 +6193,7 @@ function renderBalanceGeneral(){
     <div class="add-form" style="margin-bottom:0;">
       <h3 style="color:#818cf8;">CAPITAL</h3>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3010 Capital del Titular</span><span class="td-mono">${fmt(capitalTitular)}</span></div>
-      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}${tarjetaAperturaAdeudo>0?` − Tarjeta de Apertura: ${fmt(tarjetaAperturaAdeudo)}`:''}${capitalAperturaTransicion!==0?` + ITBIS Recuperado de Transición: ${fmt(capitalAperturaTransicion)}`:''}</div>
+      <div style="padding:0 0 8px 12px;font-size:15px;color:#6b7a99;border-bottom:1px solid var(--border2);">Máquinas y Equipo: ${fmt(totalActivosFijos)} + Saldos Iniciales de Cuentas: ${fmt(saldosInicialesCuentas)}${ajustesDeCorte!==0?` ${ajustesDeCorte>=0?'+':'−'} Ajustes de Corte de Balance: ${fmt(Math.abs(ajustesDeCorte))}`:''} − Préstamos de Apertura: ${fmt(prestamosAperturaBHD)}${tarjetaAperturaAdeudo>0?` − Tarjeta de Apertura: ${fmt(tarjetaAperturaAdeudo)}`:''}${capitalAperturaTransicion!==0?` + ITBIS Recuperado de Transición: ${fmt(capitalAperturaTransicion)}`:''}${itbisPreApertura>0.004?` + ITBIS de facturas anteriores al 27-ago (ya resuelto): ${fmt(itbisPreApertura)}`:''}</div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3020 Utilidades Retenidas</span><span class="td-mono">${fmt(utilidadesRetenidas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border2);"><span>3030 Distribuciones (−)</span><span class="td-mono negative">−${fmt(distribucionesHistoricas)}</span></div>
       <div style="display:flex;justify-content:space-between;padding:12px 0 0;font-weight:700;color:#818cf8;"><span>TOTAL CAPITAL</span><span class="td-mono">${fmt(totalCapital)}</span></div>
@@ -5834,22 +6208,12 @@ function renderBalanceGeneral(){
   // Mientras una factura de CxC siga pendiente de cobro, su parte NETA ya está cubierta por
   // "Ingresos Diferidos" (arriba) — lo único que de verdad queda sin resolver, a propósito, es
   // el ITBIS que esa factura trae embebido (cxcPendiente es bruto, ingresosDiferidos es neto).
-  // Solo cuenta el ITBIS de las pendientes emitidas ANTES del 27-ago-2026: el de las emitidas
-  // desde esa fecha ya está dentro de "ITBIS por Pagar" (itbisCausado), así que no genera diferencia.
-  const pendientesPreApertura = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x) && (x.issued||'')<CUTOVER_V2);
-  const itbisFacturasPendientes = pendientesPreApertura.reduce((s,x)=>s+cxcPending(x)-(x.subtotal||0),0);
   let msgDiferencia = '';
   let esTemporal = false; // true = causa conocida y esperable (ámbar) — false = de verdad no cuadra (rojo)
   if(!cuadra){
-    if(Math.abs(diferencia - itbisFacturasPendientes) < 1){
-      esTemporal = true;
-      msgDiferencia = `esto coincide con el <strong>ITBIS de tus facturas pendientes emitidas antes del 27-ago-2026</strong> (${fmt(itbisFacturasPendientes)}) — es normal y temporal: ese ITBIS ya se resolvió antes de la V2.0, pero la factura sigue en Cuentas por Cobrar. Se corrige solo en cuanto cobres esas facturas.`;
-    } else if(Math.abs(diferencia + cxpTotal) < 1){
+    if(Math.abs(diferencia + cxpTotal) < 1){
       esTemporal = true;
       msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
-    } else if(Math.abs(diferencia - (itbisFacturasPendientes - cxpTotal)) < 1){
-      esTemporal = true;
-      msgDiferencia = `esto coincide con la combinación del <strong>ITBIS de tus facturas pendientes de cobro</strong> (${fmt(itbisFacturasPendientes)}) y tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — ambas son normales y temporales, se corrigen solas en cuanto cobres/pagues esas cuentas.`;
     } else {
       // No coincidió con ninguna causa conocida y esperable — se arma la lista SOLO con lo que
       // de verdad existe en tus datos, en vez de una lista genérica fija.
@@ -5857,7 +6221,7 @@ function renderBalanceGeneral(){
       if(hayCorteBalance) posibles.push('los ajustes de "Corte de Balance" que sí tienes registrados');
       if(hayHistoricos) posibles.push('movimientos marcados como "Histórico" que sí tienes registrados');
       posibles.push('los montos de Activos Fijos (verifica que estén escritos correctamente)');
-      msgDiferencia = `no coincide con ninguna causa esperable automática (ITBIS de CxC pendiente, o CxP pendiente) — revisa ${posibles.join(', ')}. Abajo te muestro todo lo que se registró desde la última vez que cuadró. Si no encuentras la causa ahí, mándame una captura de esta pantalla y lo rastreamos juntos.`;
+      msgDiferencia = `no coincide con ninguna causa esperable automática (por ejemplo, CxP pendiente) — revisa ${posibles.join(', ')}. Abajo te muestro todo lo que se registró desde la última vez que cuadró. Si no encuentras la causa ahí, mándame una captura de esta pantalla y lo rastreamos juntos.`;
     }
   }
   window._cuadreEstado = {cuadra, esTemporal, diferencia};
@@ -5892,10 +6256,7 @@ function renderBalanceGeneral(){
   document.getElementById('bg-af-total').textContent = fmt(totalActivosFijos);
 
   // ── DIAGNÓSTICO DETALLADO ── cada componente, visible por separado para comparar día a día
-  const cxpPorSeccion = {};
-  ['proveedores','serviciosFijos','prestamos','otros'].forEach(sec=>{
-    cxpPorSeccion[sec] = S.cuentasPagar[sec].filter(x=>x.estado!=='pagada').reduce((s,x)=>s+(sec==='prestamos'?(parseFloat(x.saldo)||0):cxpPending(x)),0);
-  });
+  const cxpPorSeccion = FIN.cxpPorSeccion();
   const cxcPorCliente = {};
   S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x)).forEach(x=>{
     const k=x.client||x.clienteNombre||'—';
@@ -6029,7 +6390,7 @@ function confirmCXPPayment(){
   const method     = document.getElementById('cxp-pay-method').value;
   const accountIdx = Math.max(0, parseInt(document.getElementById('cxp-pay-account').value)||0);
   const ref        = document.getElementById('cxp-pay-ref').value.trim();
-  const amount     = numVal('cxp-pay-amount')||0;
+  const amount     = r2(numVal('cxp-pay-amount')||0);
   const pending    = cxpPending(item);
 
   if(!date)            { notify('error','Fecha Requerida','Selecciona la fecha de pago.'); return; }
@@ -6107,7 +6468,7 @@ function confirmCXPPayment(){
                + (numPagos>1 ? ` (Abono ${numPagos})` : '');
     if(accountIdx>=0 && accountIdx<S.accounts.length){
       S.accounts[accountIdx].transactions.push({
-        id:Date.now()+1, date, type:'egreso', method:methodKey, amount, desc, ref
+        id:Date.now()+1, date, type:'egreso', method:methodKey, amount, desc, ref, linkTipo:'cxpPago', linkId:pagoId
       });
       save(); // explicit save after pushTx to guarantee persistence
       renderTx(accountIdx);
@@ -6118,7 +6479,7 @@ function confirmCXPPayment(){
   save(); closeCXPPayModal(); renderCXP();
   // Base efectivo: el gasto se reconoce al pagar, no al recibir la obligación.
   // Histórico: mismo egreso para el Estado de Resultados, pero sin tocar ninguna cuenta bancaria.
-  autoEgresoFromCxP(item, amount, date, method, accountIdx, method==='historico', seccionDelPago, pagoId, ref, interesDeEstePago);
+  autoEgresoFromCxP(item, amount, date, method, accountIdx, method==='historico', seccionDelPago, pagoId, ref, interesDeEstePago, newPending<=0.009);
 
   const isPartial = newPending > 0.009;
   let pdetail=`Monto: ${fmt(amount)} → ${method==='historico'?'<b>Histórico (sin cuenta)</b>':esc(S.accounts[accountIdx]?.name)||''}`;
@@ -6294,36 +6655,22 @@ function renderComparativo(){
 // reconstruirlo a mano (donde ya nos hemos equivocado). Muestra el mismo cálculo de dos formas
 // distintas e independientes, que DEBERÍAN dar el mismo resultado si todo está consistente.
 function verificacionMaestra(){
-  const totalIngresos = S.ingresos.reduce((s,x)=>s+x.monto-(x.itbis||0),0);
-  const totalEgresos = S.egresos.reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
-  const histIngresos = S.ingresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.itbis||0),0);
-  const histEgresos = S.egresos.filter(x=>x.esHistorico).reduce((s,x)=>s+x.monto-(x.categoria!=='itbis'?(x.itbis||0):0),0);
-  const efectivoNoBancarizado = histIngresos - histEgresos;
-
-  let sumaInicial=0, sumaActual=0;
-  S.accounts.forEach(acc=>{
-    sumaInicial += acc.initialBalance||0;
-    let bal = acc.initialBalance||0;
-    (acc.transactions||[]).forEach(t=>{ bal += t.type==='ingreso' ? t.amount : -t.amount; });
-    sumaActual += bal;
-  });
-  const cambioTotalBancos = sumaActual - sumaInicial;
-
-  // Vía 1: lo que Ingresos/Egresos NO históricos predicen que debió pasar en los bancos — aquí
-  // SÍ se usa el monto bruto (con ITBIS), porque al banco entra/sale el efectivo completo, el
-  // ITBIS no desaparece del movimiento bancario, solo de la Utilidad.
-  // Solo cuentan los que pasaron por una cuenta de banco/caja. Los egresos pagados con TARJETA de crédito
-  // no sacan dinero del banco (crean deuda en la tarjeta), así que no se esperan en el cambio bancario.
-  const pasaPorBanco = x => x.metodo!=='tarjeta' && x.cuentaIdx!=null && !!S.accounts[x.cuentaIdx];
-  const ingresosNoHistBruto = S.ingresos.filter(x=>!x.esHistorico && (x.cuentaIdx==null || !!S.accounts[x.cuentaIdx])).reduce((s,x)=>s+x.monto,0);
-  const egresosNoHistBruto = S.egresos.filter(x=>!x.esHistorico && pasaPorBanco(x)).reduce((s,x)=>s+x.monto,0);
-  const egresosTarjetaNoHist = S.egresos.filter(x=>!x.esHistorico && !pasaPorBanco(x)).reduce((s,x)=>s+x.monto,0);
-  // Las Distribuciones de Utilidades sacan dinero real del banco pero NO son Egresos (son capital)
-  let distribuidoBancos=0;
-  S.accounts.forEach(acc=>(acc.transactions||[]).forEach(t=>{ if(t.esDistribucion) distribuidoBancos += t.amount; }));
-  const cambioEsperadoBancos = ingresosNoHistBruto - egresosNoHistBruto - distribuidoBancos;
-
-  const diffBancos = Math.round((cambioTotalBancos - cambioEsperadoBancos)*100)/100;
+  const totalIngresos = sumC(S.ingresos,FIN.ingresoNeto);
+  const totalEgresos = sumC(S.egresos,FIN.egresoBalance);
+  const histIngresos = sumC(S.ingresos.filter(x=>x.esHistorico),FIN.ingresoNeto);
+  const histEgresos = sumC(S.egresos.filter(x=>x.esHistorico),FIN.egresoCaja);
+  const efectivoNoBancarizado = r2(histIngresos - histEgresos);
+  const sumaInicial = FIN.saldoInicialBancos();
+  const sumaActual = FIN.saldoBancos();
+  const cambioTotalBancos = r2(sumaActual - sumaInicial);
+  // Lo que Ingresos/Egresos NO históricos predicen que pasó en bancos — bruto (con ITBIS), porque al
+  // banco entra/sale el efectivo completo. Tarjeta no mueve el banco. Las Distribuciones son capital, no gasto.
+  const E = FIN.esperadoBancos();
+  const ingresosNoHistBruto=E.ing, egresosNoHistBruto=E.egr, egresosTarjetaNoHist=E.tarj, distribuidoBancos=E.dist;
+  const cambioEsperadoBancos = E.esperado;
+  const diffBancos = r2(cambioTotalBancos - cambioEsperadoBancos);
+  const cruce = FIN.cruceReportes();
+  const B = FIN.balance();
 
   const msg = `
     <strong>Ingresos (todo, neto de ITBIS):</strong> ${fmt(totalIngresos)}<br>
@@ -6339,7 +6686,9 @@ function verificacionMaestra(){
     <strong>(Egresos pagados con tarjeta — no salen del banco, no se esperan aquí):</strong> ${fmt(egresosTarjetaNoHist)}<br>
     <strong>− Distribuciones de Utilidades (retiros del dueño, no son gasto):</strong> ${fmt(distribuidoBancos)}<br>
     <strong>= Cambio ESPERADO en bancos:</strong> ${fmt(cambioEsperadoBancos)}<br><br>
-    <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong>
+    <strong style="color:${Math.abs(diffBancos)<1?'#4ade80':'#ef4444'};">Diferencia (real − esperado): ${fmt(diffBancos)}</strong><br><br>
+    <strong>Cuadre del Balance General:</strong> <span style="color:${Math.abs(B.diferencia)<0.01?'#4ade80':'#ef4444'};">${fmt(B.diferencia)}</span><br>
+    <strong>Cruce Estado de Resultados ↔ Balance:</strong> <span style="color:${Math.abs(cruce.dif)<0.01?'#4ade80':'#ef4444'};">${Math.abs(cruce.dif)<0.01?'coinciden':'difieren en '+fmt(cruce.dif)}</span>
   `;
   icgAlert(msg, 'Verificación Maestra');
 }
@@ -6375,6 +6724,7 @@ function repararEgresosFaltantesCaja(){
     (acc.transactions||[]).forEach(t=>{
       if(t.esTransferenciaInterna) return;
       if(t.esDistribucion) return; // retiro del dueño: capital, nunca gasto
+      if(t.linkTipo) return; // ya está enlazado por ID a su registro de origen
       if(t.type!=='egreso' && t.type!=='impuesto') return;
       const yaExiste = S.egresos.some(e=>e.cuentaIdx===idx && e.fecha===t.date && Math.abs(e.monto-t.amount)<0.01 && !e.esHistorico);
       if(!yaExiste) encontrados.push({acc,idx,t});
@@ -6738,7 +7088,8 @@ function handleImportFile(event){
       if(!S.suplidores) S.suplidores=[];
       if(!S.ingresos)   S.ingresos=[];
       if(!S.egresos)    S.egresos=[];
-      ensureEstadoIntegro();
+      ensureEstadoIntegro(); migrarVinculosPorId(); bitacoraRebase();
+      _bitPush({id:Date.now()*1000,ts:Date.now(),accion:'Importó respaldo',tipo:'Sistema completo',detalle:file.name,monto:null,fecha:''});
       save(); renderTabs(); renderAccountPanels(); renderCCPanel(); refreshCXCBankSelect(); renderCXC(); activateTab(0);
       notify('success','Importación Exitosa','Todos tus datos han sido cargados.');
       event.target.value='';
@@ -7273,7 +7624,7 @@ function addIngreso(auto=false,data={}){
   const fecha=auto?data.fecha:document.getElementById('ing-fecha').value;
   const clienteId=auto?data.clienteId:parseInt(document.getElementById('ing-cliente').value)||null;
   const cat=auto?data.categoria:document.getElementById('ing-categoria').value;
-  const monto=auto?data.monto:numVal('ing-monto')||0;
+  const monto=r2(auto?data.monto:numVal('ing-monto')||0);
   const desc=auto?data.desc:document.getElementById('ing-desc').value.trim();
   const metodo=auto?data.metodo:document.getElementById('ing-metodo').value;
   const ref=auto?(data.ref||''):document.getElementById('ing-ref').value.trim();
@@ -7286,13 +7637,14 @@ function addIngreso(auto=false,data={}){
 
   const guardar=()=>{
     const cliente=S.clientes.find(x=>x.id===clienteId);
-    S.ingresos.push({id:Date.now()+Math.random(),fecha,clienteId,clienteNombre:cliente?.nombre||data.clienteNombre||'',categoria:cat,monto,itbis:auto?(parseFloat(data.itbis)||0):0,desc,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,tipoVenta});
+    const ingresoId=Date.now()+Math.random();
+    S.ingresos.push({id:ingresoId,fecha,clienteId,clienteNombre:cliente?.nombre||data.clienteNombre||'',categoria:cat,monto,itbis:auto?r2(parseFloat(data.itbis)||0):0,desc,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&data.facturaId!=null?{facturaId:data.facturaId}:{}),tipoVenta});
     S.ingresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(!esHistorico){
         // Acreditar en la cuenta bancaria seleccionada
         const txMethod = ['cheque','efectivo','debito','retiro','debito_directo'].includes(metodo)?metodo:'transferencia';
-        pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'ingreso',method:txMethod,amount:monto,ref,
+        pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'ingreso',method:txMethod,amount:monto,ref,linkTipo:'ingreso',linkId:ingresoId,
           desc:`Ingreso: ${cliente?.nombre||''} – ${desc||ING_CAT_LABELS[cat]||cat}`});
         renderTx(cuentaIdx);
       }
@@ -7339,7 +7691,7 @@ function addRecibo(){
   const fecha=document.getElementById('rec-fecha').value;
   const clienteId=parseInt(document.getElementById('rec-cliente').value)||null;
   const cat=document.getElementById('rec-categoria').value;
-  const monto=numVal('rec-monto')||0;
+  const monto=r2(numVal('rec-monto')||0);
   const concepto=document.getElementById('rec-concepto').value.trim();
   const metodo=document.getElementById('rec-metodo').value;
   const cuentaSelVal=document.getElementById('rec-cuenta').value;
@@ -7360,7 +7712,7 @@ function addRecibo(){
   // cuenta bancaria elegida — salvo que sea Histórico) y cuenta en el Estado de Resultados.
   if(!esHistorico){
     const txMethod = ['cheque','efectivo','debito','retiro','debito_directo'].includes(metodo)?metodo:'transferencia';
-    pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'ingreso',method:txMethod,amount:monto,
+    pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'ingreso',method:txMethod,amount:monto,linkTipo:'recibo',linkId:recId,
       desc:`Recibo ${numero}: ${cliente?.nombre||''}${concepto?' – '+concepto:''}`});
     renderTx(cuentaIdx);
   }
@@ -7376,10 +7728,19 @@ function addRecibo(){
 }
 
 function delRecibo(id){
-  icgConfirm('¿Eliminar este recibo? El ingreso y el movimiento bancario ya registrados no se revertirán automáticamente.','Eliminar Recibo','Eliminar').then(ok=>{
-    if(!ok)return;
+  const r=S.recibos.find(x=>x.id===id); if(!r) return Promise.resolve(false);
+  const ing=S.ingresos.find(x=>x.fuente==='recibo' && x.fuenteId===id);
+  const vinc=buscarTxVinculado('recibo',id);
+  const partes=[]; if(ing) partes.push('el Ingreso del Estado de Resultados'); if(vinc) partes.push(`el movimiento de ${fmt(vinc.tx.amount)} en <strong>${esc(S.accounts[vinc.idx].name)}</strong>`);
+  const msg = partes.length ? `Al eliminar este recibo también se eliminan ${partes.join(' y ')}, para que todo quede en cero. ¿Continuar?` : '¿Eliminar este recibo?';
+  return icgConfirm(msg,'Eliminar Recibo','Eliminar',true).then(ok=>{
+    if(!ok)return false;
+    respaldoAuto('Antes de eliminar un recibo');
+    if(vinc) quitarTx(vinc.idx,vinc.tx.id);
+    if(ing) S.ingresos=S.ingresos.filter(x=>x.id!==ing.id);
     S.recibos=S.recibos.filter(x=>x.id!==id);
-    save(); renderRecibos();
+    save(); renderRecibos(); try{ renderIngresos(); if(vinc){renderTx(vinc.idx); renderConsolidated();} }catch(e){}
+    return true;
   });
 }
 
@@ -7508,10 +7869,22 @@ function delIngreso(id){
   const x=S.ingresos.find(i=>i.id===id);
   if(!x) return Promise.resolve(false);
   if(x.fuente && x.fuente!=='manual'){
-    icgAlert(`Este ingreso viene de ${x.fuente==='cxc'?'un cobro de CxC':x.fuente==='recibo'?'un Recibo de Ingreso':'otro registro automático'} — no se puede eliminar directamente desde aquí, porque quedaría desincronizado. Ve a ${x.fuente==='cxc'?'CxC':x.fuente==='recibo'?'Recibos de Ingreso':'el origen correspondiente'} para corregirlo desde la fuente.`,'No se Puede Eliminar Aquí');
+    icgAlert(`Este ingreso viene de ${x.fuente==='cxc'?'un cobro de CxC':x.fuente==='recibo'?'un Recibo de Ingreso':'otro registro automático'} — no se puede eliminar directamente desde aquí, porque quedaría desincronizado. Ve a ${x.fuente==='cxc'?'CxC (reabre la factura)':x.fuente==='recibo'?'Recibos de Ingreso':'el origen correspondiente'} para corregirlo desde la fuente.`,'No se Puede Eliminar Aquí');
     return Promise.resolve(false);
   }
-  return icgConfirm('¿Eliminar este ingreso del historial?','Eliminar Ingreso','Eliminar').then(ok=>{if(!ok)return false;S.ingresos=S.ingresos.filter(i=>i.id!==id);save();renderIngresos();return true;});
+  const vinc = x.esHistorico ? null : buscarTxVinculado('ingreso',id);
+  const msg = vinc
+    ? `Este ingreso también acreditó ${fmt(vinc.tx.amount)} en la cuenta <strong>${esc(S.accounts[vinc.idx].name)}</strong> (${fmtDate(vinc.tx.date)}). Al eliminarlo, ese movimiento se eliminará también y el saldo de la cuenta se ajusta. ¿Continuar?`
+    : '¿Eliminar este ingreso del historial?';
+  return icgConfirm(msg,'Eliminar Ingreso','Eliminar',true).then(ok=>{
+    if(!ok)return false;
+    respaldoAuto('Antes de eliminar un ingreso');
+    if(vinc) quitarTx(vinc.idx,vinc.tx.id);
+    S.ingresos=S.ingresos.filter(i=>i.id!==id);
+    save(); renderIngresos();
+    if(vinc){ try{ renderTx(vinc.idx); renderConsolidated(); }catch(e){} }
+    return true;
+  });
 }
 
 // ══════════════════ FASE 1: CARGAR COMPROBANTE (OCR) ══════════════════
@@ -8749,6 +9122,7 @@ function confirmarComprobanteCliente(){
     if(!item){notify('error','No Encontrado','Esa factura ya no existe.');return;}
     openPayModal(item.id);
     setMontoValue('pay-monto-ahora',monto);
+    calcPayNet();
     document.getElementById('pay-date').value=fecha;
     document.getElementById('pay-ref').value=ref;
     document.getElementById('pay-method').value='transferencia';
@@ -8898,9 +9272,9 @@ function addEgreso(auto=false,data={}){
   const suplidorId=auto?data.suplidorId:parseInt(document.getElementById('egr-suplidor').value)||null;
   const cat=auto?data.categoria:document.getElementById('egr-categoria').value;
   const subcategoria=auto?(data.subcategoria||''):(cat==='materiales'?(document.getElementById('egr-subcategoria')?.value||''):'');
-  const monto=auto?data.monto:numVal('egr-monto')||0;
-  const itbis=auto?(data.itbis||0):(numVal('egr-itbis')||0);
-  const subtotal=auto?(data.subtotal||0):(numVal('egr-subtotal')||0);
+  const monto=r2(auto?data.monto:numVal('egr-monto')||0);
+  const itbis=r2(auto?(data.itbis||0):(numVal('egr-itbis')||0));
+  const subtotal=r2(auto?(data.subtotal||0):(numVal('egr-subtotal')||0));
   const desc=auto?data.desc:document.getElementById('egr-desc').value.trim();
   const numFactura=auto?(data.numFactura||''):document.getElementById('egr-numfactura').value.trim();
   const metodo=auto?data.metodo:document.getElementById('egr-metodo').value;
@@ -8915,7 +9289,7 @@ function addEgreso(auto=false,data={}){
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
     const egresoId=Date.now()+Math.random();
-    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&typeof data.interesPrestamo==='number'?{interesPrestamo:data.interesPrestamo}:{})});
+    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&data.fuenteItemId!=null?{fuenteItemId:data.fuenteItemId,fuenteSeccion:data.fuenteSeccion||null}:{}),...(auto&&typeof data.interesPrestamo==='number'?{interesPrestamo:data.interesPrestamo}:{})});
     S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(esHistorico){
@@ -8923,7 +9297,7 @@ function addEgreso(auto=false,data={}){
       } else if(metodo !== 'tarjeta'){
         // Debit bank account (except credit card — CC handles its own balance)
         const txMethod = ['cheque','efectivo','debito','retiro','debito_directo'].includes(metodo)?metodo:'transferencia';
-        pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'egreso',method:txMethod,amount:monto,ref,
+        pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'egreso',method:txMethod,amount:monto,ref,linkTipo:'egreso',linkId:egresoId,
           desc:`Egreso: ${suplidor?.nombre||''} – ${desc||EGR_CAT_LABELS[cat]||cat}`});
         renderTx(cuentaIdx);
       } else {
@@ -9012,16 +9386,15 @@ function confirmarCambiarFechaEgreso(){
   if(nueva===x.fecha){ closeCambiarFechaEgresoModal(); return; }
   const vieja=x.fecha;
   // Movimiento vinculado en la cuenta (mismo criterio que al eliminar): misma cuenta, fecha vieja y monto, "Egreso: ..."
-  const tx = (x.metodo!=='tarjeta' && !x.esHistorico && x.cuentaIdx!=null && S.accounts[x.cuentaIdx])
-    ? (S.accounts[x.cuentaIdx].transactions||[]).find(t=>t.type==='egreso' && !t.esTransferenciaInterna && !t.esDistribucion && t.date===vieja && Math.abs(t.amount-x.monto)<0.01 && /^Egreso:/.test(t.desc||''))
-    : null;
+  const vinc = (x.metodo!=='tarjeta' && !x.esHistorico) ? buscarTxVinculado('egreso',x.id) : null;
+  const tx = vinc?vinc.tx:null;
   const cargo = x.metodo==='tarjeta' ? S.creditCard.transactions.find(t=>t.egresoRef===x.id) : null;
   x.fecha=nueva;
   S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
-  if(tx){ tx.date=nueva; S.accounts[x.cuentaIdx].transactions.sort((a,b)=>a.date.localeCompare(b.date)); }
+  if(tx){ tx.date=nueva; S.accounts[vinc.idx].transactions.sort((a,b)=>a.date.localeCompare(b.date)); }
   if(cargo){ cargo.date=nueva; S.creditCard.transactions.sort((a,b)=>a.date.localeCompare(b.date)); }
   save(); renderEgresos();
-  try{ if(tx) renderTx(x.cuentaIdx); if(cargo&&typeof renderCCTx==='function') renderCCTx(); renderConsolidated(); }catch(e){}
+  try{ if(tx) renderTx(vinc.idx); if(cargo&&typeof renderCCTx==='function') renderCCTx(); renderConsolidated(); }catch(e){}
   closeCambiarFechaEgresoModal();
   notify('success','Fecha Actualizada',`${fmtDate(vieja)} → ${fmtDate(nueva)}${tx?' · movimiento de la cuenta también actualizado':''}${cargo?' · cargo de la tarjeta también actualizado':''}`);
 }
@@ -9033,22 +9406,22 @@ function delEgreso(id){
     return Promise.resolve(false);
   }
   const cargoVinculado = x.metodo==='tarjeta' ? S.creditCard.transactions.find(t=>t.egresoRef===id) : null;
-  // Movimiento que este egreso dejó en la cuenta (banco o Caja): misma cuenta, fecha y monto,
-  // creado por addEgreso con descripción "Egreso: ..." — así no queda descontado un dinero que ya no es gasto.
-  const txVinculado = (x.metodo!=='tarjeta' && !x.esHistorico && x.cuentaIdx!=null && S.accounts[x.cuentaIdx])
-    ? (S.accounts[x.cuentaIdx].transactions||[]).find(t=>t.type==='egreso' && !t.esTransferenciaInterna && !t.esDistribucion && t.date===x.fecha && Math.abs(t.amount-x.monto)<0.01 && /^Egreso:/.test(t.desc||''))
-    : null;
+  // Movimiento que este egreso dejó en la cuenta: se busca por ID (linkId). Los egresos anteriores a
+  // los vínculos por ID se reconocen una vez por cuenta+fecha+monto (migrarVinculosPorId).
+  const vinc = (x.metodo!=='tarjeta' && !x.esHistorico) ? buscarTxVinculado('egreso',id) : null;
+  const txVinculado = vinc?vinc.tx:null;
   let msg = cargoVinculado
     ? `Este egreso también generó un cargo de ${fmt(cargoVinculado.amount)} en tu Tarjeta de Crédito. Al eliminar el egreso, ese cargo se eliminará también. ¿Continuar?`
     : '¿Eliminar este egreso del historial?';
-  if(txVinculado) msg = `Este egreso también descontó ${fmt(txVinculado.amount)} de la cuenta <strong>${esc(S.accounts[x.cuentaIdx].name)}</strong> (${fmtDate(txVinculado.date)}). Al eliminarlo, ese movimiento se eliminará también y el saldo de la cuenta se recupera. ¿Continuar?`;
+  if(txVinculado) msg = `Este egreso también descontó ${fmt(txVinculado.amount)} de la cuenta <strong>${esc(S.accounts[vinc.idx].name)}</strong> (${fmtDate(txVinculado.date)}). Al eliminarlo, ese movimiento se eliminará también y el saldo de la cuenta se recupera. ¿Continuar?`;
   return icgConfirm(msg,'Eliminar Egreso','Eliminar',true).then(ok=>{
     if(!ok)return false;
+    respaldoAuto('Antes de eliminar un egreso');
     if(cargoVinculado) S.creditCard.transactions=S.creditCard.transactions.filter(t=>t.id!==cargoVinculado.id);
-    if(txVinculado){ S.accounts[x.cuentaIdx].transactions=S.accounts[x.cuentaIdx].transactions.filter(t=>t.id!==txVinculado.id); }
+    if(txVinculado) quitarTx(vinc.idx,txVinculado.id);
     S.egresos=S.egresos.filter(e=>e.id!==id);
     save(); renderEgresos(); updateCCCards(); renderCCTx();
-    if(txVinculado){ try{ renderTx(x.cuentaIdx); renderConsolidated(); }catch(e){} }
+    if(txVinculado){ try{ renderTx(vinc.idx); renderConsolidated(); }catch(e){} }
     return true;
   });
 }
@@ -9068,7 +9441,7 @@ function addReciboEgreso(){
   const fecha=document.getElementById('recegr-fecha').value;
   const suplidorId=parseInt(document.getElementById('recegr-suplidor').value)||null;
   const cat=document.getElementById('recegr-categoria').value;
-  const monto=numVal('recegr-monto')||0;
+  const monto=r2(numVal('recegr-monto')||0);
   const concepto=document.getElementById('recegr-concepto').value.trim();
   const metodo=document.getElementById('recegr-metodo').value;
   const cuentaSelVal=document.getElementById('recegr-cuenta').value;
@@ -9088,7 +9461,7 @@ function addReciboEgreso(){
   // bancaria elegida — salvo que sea Histórico) y cuenta en el Estado de Resultados.
   if(!esHistorico){
     const txMethod = ['cheque','efectivo','debito','retiro','debito_directo'].includes(metodo)?metodo:'transferencia';
-    pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'egreso',method:txMethod,amount:monto,ref,
+    pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'egreso',method:txMethod,amount:monto,ref,linkTipo:'reciboEgreso',linkId:recId,
       desc:`Recibo ${numero}: ${suplidor?.nombre||''}${concepto?' – '+concepto:''}`});
     renderTx(cuentaIdx);
   }
@@ -9103,10 +9476,19 @@ function addReciboEgreso(){
 }
 
 function delReciboEgreso(id){
-  icgConfirm('¿Eliminar este recibo? El egreso y el movimiento bancario ya registrados no se revertirán automáticamente.','Eliminar Recibo','Eliminar').then(ok=>{
-    if(!ok)return;
+  const r=S.recibosEgreso.find(x=>x.id===id); if(!r) return Promise.resolve(false);
+  const egr=S.egresos.find(x=>x.fuente==='reciboEgreso' && x.fuenteId===id);
+  const vinc=buscarTxVinculado('reciboEgreso',id);
+  const partes=[]; if(egr) partes.push('el Egreso del Estado de Resultados'); if(vinc) partes.push(`el movimiento de ${fmt(vinc.tx.amount)} en <strong>${esc(S.accounts[vinc.idx].name)}</strong>`);
+  const msg = partes.length ? `Al eliminar este recibo también se eliminan ${partes.join(' y ')}, para que todo quede en cero. ¿Continuar?` : '¿Eliminar este recibo?';
+  return icgConfirm(msg,'Eliminar Recibo','Eliminar',true).then(ok=>{
+    if(!ok)return false;
+    respaldoAuto('Antes de eliminar un recibo de egreso');
+    if(vinc) quitarTx(vinc.idx,vinc.tx.id);
+    if(egr) S.egresos=S.egresos.filter(x=>x.id!==egr.id);
     S.recibosEgreso=S.recibosEgreso.filter(x=>x.id!==id);
-    save(); renderRecibosEgreso();
+    save(); renderRecibosEgreso(); try{ renderEgresos(); if(vinc){renderTx(vinc.idx); renderConsolidated();} }catch(e){}
+    return true;
   });
 }
 
@@ -9449,7 +9831,7 @@ function applyCorte(){
           type:diff>0?'ingreso':'egreso',
           method:'transferencia',
           amount:Math.abs(diff),
-          desc:`Ajuste de corte — ${fmtDate(dateToday)}`
+          desc:`Ajuste de corte — ${fmtDate(dateToday)}`, esAjusteCorte:true
         });
         acc.transactions.sort((a,b)=>a.date.localeCompare(b.date));
       }
@@ -9600,8 +9982,15 @@ function autoIngresoFromCxC(x,netAmount,date,method,bankIdx,esHistorico=false,mo
   // — si hubo retención, el ITBIS efectivo también se reduce proporcionalmente.
   const base = montoBruto!=null ? montoBruto : netAmount;
   const itbisFactura = parseFloat(x.itbis)||0;
-  const itbisProrrateado = (x.amount>0 && itbisFactura>0) ? itbisFactura*(base/x.amount) : 0;
-  addIngreso(true,{fecha:date,clienteId:x.clientId||null,clienteNombre:x.client,categoria:x.categoria||'',monto:netAmount,itbis:itbisProrrateado,desc:`Fact. ${x.invoice}${x.desc?' – '+x.desc:''}`,metodo:method,ref,cuentaIdx:bankIdx,fuente:'cxc',fuenteId:fId,esHistorico,tipoVenta:x.tipoVenta||'corporativa'});save();
+  // Cada abono lleva su parte del ITBIS redondeada al centavo; el ÚLTIMO abono (el que salda la
+  // factura) lleva exactamente lo que falta, para que la suma de todos los abonos sea el ITBIS de
+  // la factura al centavo (sin diferencias de 1 centavo por redondear cada abono por separado).
+  let itbisProrrateado = (x.amount>0 && itbisFactura>0) ? r2(itbisFactura*(base/x.amount)) : 0;
+  if(itbisFactura>0 && x.amount>0 && cxcPending(x)<=0.009){
+    const yaAsignado = sumC(S.ingresos.filter(i=>i.fuente==='cxc' && (i.facturaId===x.id || facturaDeIngreso(i)===x)),i=>i.itbis||0);
+    itbisProrrateado = Math.max(0, r2(itbisFactura - yaAsignado));
+  }
+  addIngreso(true,{fecha:date,clienteId:x.clientId||null,clienteNombre:x.client,categoria:x.categoria||'',monto:netAmount,itbis:itbisProrrateado,desc:`Fact. ${x.invoice}${x.desc?' – '+x.desc:''}`,metodo:method,ref,cuentaIdx:bankIdx,fuente:'cxc',fuenteId:fId,facturaId:x.id,esHistorico,tipoVenta:x.tipoVenta||'corporativa'});save();
 }
 // Repara el ITBIS ya guardado en los Ingresos que se generaron automáticamente al cobrar una
 // factura de CxC — estos son los que realmente mueven el número "ITBIS Cobrado" en Rentabilidad.
@@ -9661,7 +10050,12 @@ function estimarInteresPrestamosViejos(){
   (S.cuentasPagar?.prestamos||[]).forEach(pr=>{
     const r=(parseFloat(pr.tasa)||0)/100/12; if(r<=0) return;
     const desc=pr.concepto||pr.nombre;
-    const pend=S.egresos.filter(e=>e.categoria==='prestamos'&&e.fuente==='cxp'&&e.suplidorNombre===pr.nombre&&e.desc===desc);
+    // Por ID del préstamo (fuenteItemId). Solo los pagos viejos que aún no traen ese vínculo se
+    // reconocen por nombre+descripción una única vez, y en ese momento se les graba el ID.
+    S.egresos.forEach(e=>{
+      if(e.categoria==='prestamos'&&e.fuente==='cxp'&&e.fuenteItemId==null&&e.suplidorNombre===pr.nombre&&e.desc===desc){ e.fuenteItemId=pr.id; e.fuenteSeccion='prestamos'; }
+    });
+    const pend=S.egresos.filter(e=>e.categoria==='prestamos'&&e.fuente==='cxp'&&e.fuenteItemId===pr.id);
     if(!pend.some(e=>typeof e.interesPrestamo!=='number')) return;
     let saldoDespues=parseFloat(pr.saldo)||0;
     [...pend].sort((a,b)=>b.fecha.localeCompare(a.fecha)||(b.id>a.id?1:-1)).forEach(e=>{
@@ -9677,7 +10071,7 @@ function estimarInteresPrestamosViejos(){
   return n;
 }
 
-function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref='',interesPrestamo=null){
+function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,section=null,pagoId=null,ref='',interesPrestamo=null,esUltimoPago=false){
   const fId = pagoId!=null ? pagoId : item.id;
   if(S.egresos.find(e=>e.fuenteId===fId&&e.fuente==='cxp'))return;
   const cat = section==='prestamos' ? 'prestamos' : resolverCategoriaEgresoDeCxP(item.categoriaEgreso);
@@ -9688,11 +10082,16 @@ function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,
   let itbis=0, subtotal=amount;
   if(item.itbis>0 && item.monto>0){
     const proporcion = amount/item.monto;
-    itbis = Math.round(item.itbis*proporcion*100)/100;
-    subtotal = Math.round((amount-itbis)*100)/100;
+    itbis = r2(item.itbis*proporcion);
+    if(esUltimoPago){
+      // Último pago: lleva exactamente el ITBIS que falta (la suma de los abonos = ITBIS de la factura, al centavo).
+      const yaAsignado = sumC(S.egresos.filter(e=>e.fuente==='cxp' && (e.fuenteItemId===item.id || e.fuenteId===item.id || (item.pagos||[]).some(pg=>pg.id===e.fuenteId))),e=>e.itbis||0);
+      itbis = Math.max(0, r2(item.itbis - yaAsignado));
+    }
+    subtotal = r2(amount-itbis);
   }
   addEgreso(true,{fecha:date,suplidorId:null,suplidorNombre:item.nombre,categoria:cat,monto:amount,itbis,subtotal,
-    desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,esHistorico,interesPrestamo:(typeof interesPrestamo==='number'?interesPrestamo:undefined)});
+    desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,fuenteItemId:item.id,fuenteSeccion:section,esHistorico,interesPrestamo:(typeof interesPrestamo==='number'?interesPrestamo:undefined)});
   save();
 }
 // Reparación única: por un bug ya corregido en el código (los Egresos generados al pagar una
@@ -10254,7 +10653,7 @@ function renderResumenImpuestos(){
   const itbisCobradoHist = S.ingresos.reduce((s,x)=>s+(x.itbis||0),0);
   const itbisCreditoHist = S.egresos.filter(x=>x.categoria!=='itbis').reduce((s,x)=>s+(x.itbis||0),0);
   const itbisRemesasHist = S.egresos.filter(x=>x.categoria==='itbis').reduce((s,x)=>s+x.monto,0);
-  const itbisPorPagar = Math.max(0, itbisCobradoHist - itbisCreditoHist - itbisRemesasHist);
+  const itbisPorPagar = FIN.balance().itbisPorPagar; // mismo cálculo que el Balance General (motor único)
 
   const sumaCat = cat => S.egresos.filter(x=>enElAnio(x)&&x.categoria===cat).reduce((s,x)=>s+x.monto,0);
 
@@ -10339,7 +10738,7 @@ function refreshDistribAccountSelect(){
 }
 function confirmDistribucion(){
   const fecha=document.getElementById('dist-fecha').value;
-  const monto=numVal('dist-monto')||0;
+  const monto=r2(numVal('dist-monto')||0);
   const cuentaIdx=parseInt(document.getElementById('dist-cuenta').value)||0;
   const metodo=document.getElementById('dist-metodo').value;
   const ref=document.getElementById('dist-ref').value.trim();
@@ -10351,7 +10750,7 @@ function confirmDistribucion(){
     S.distribuciones.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     // Sale efectivo real de la cuenta — pero NUNCA se agrega a S.egresos (fuera del P&L)
     pushTx(cuentaIdx,{id:Date.now()+1,date:fecha,type:'egreso',method:metodo,amount:monto,
-      desc:`Distribución de Utilidades (Retiro de Capital)${ref?' · Ref: '+ref:''}`,esDistribucion:true,cuentaCode:'3030'});
+      desc:`Distribución de Utilidades (Retiro de Capital)${ref?' · Ref: '+ref:''}`,esDistribucion:true,cuentaCode:'3030',linkTipo:'distribucion',linkId:id});
     renderTx(cuentaIdx);
     save(); renderDistribuciones();
     document.getElementById('dist-monto').value='';
@@ -10360,10 +10759,16 @@ function confirmDistribucion(){
   });
 }
 function delDistribucion(id){
-  icgConfirm('¿Eliminar este registro de distribución? El movimiento bancario asociado no se revertirá automáticamente.','Eliminar Distribución','Eliminar').then(ok=>{
-    if(!ok)return;
+  const d=S.distribuciones.find(x=>x.id===id); if(!d) return Promise.resolve(false);
+  const vinc=buscarTxVinculado('distribucion',id);
+  const msg = vinc ? `Al eliminar esta distribución también se elimina el retiro de ${fmt(vinc.tx.amount)} en <strong>${esc(S.accounts[vinc.idx].name)}</strong>, y el dinero vuelve al saldo de la cuenta. ¿Continuar?` : '¿Eliminar este registro de distribución?';
+  return icgConfirm(msg,'Eliminar Distribución','Eliminar',true).then(ok=>{
+    if(!ok)return false;
+    respaldoAuto('Antes de eliminar una distribución');
+    if(vinc) quitarTx(vinc.idx,vinc.tx.id);
     S.distribuciones=S.distribuciones.filter(x=>x.id!==id);
-    save(); renderDistribuciones();
+    save(); renderDistribuciones(); try{ if(vinc){renderTx(vinc.idx); renderConsolidated();} }catch(e){}
+    return true;
   });
 }
 function totalDistribuido(desde,hasta){
@@ -11027,6 +11432,7 @@ function ensureCajaGeneral(){
 function applyFirebaseData(data){
   S = data;
   ensureEstadoIntegro();
+  try{ migrarVinculosPorId(); bitacoraRebase(); }catch(e){}
   try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch(e){}
 }
 
