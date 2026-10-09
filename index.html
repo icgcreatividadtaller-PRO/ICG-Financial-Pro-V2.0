@@ -3155,6 +3155,9 @@ function toggleTipoVenta(section, id){
   rerender();
 }
 
+// El vigía del cuadre se dispara después de cada guardado (ver programarVigiaCuadre).
+(function(){ const _saveOriginal=save; save=function(){ const r=_saveOriginal.apply(this,arguments); try{programarVigiaCuadre();}catch(e){} return r; }; })();
+
 // ══════════════════ INIT ══════════════════
 function init(){
   ensureEstadoIntegro();
@@ -5629,6 +5632,70 @@ function delActivoFijo(id){
     save(); renderBalanceGeneral();
   });
 }
+
+// ══════════════════ VIGÍA DEL CUADRE ══════════════════
+// El sistema revisa solo, después de cada guardado, si el Balance General sigue cuadrando.
+// Así no hay que entrar a mirar el aviso después de cada registro: si un registro lo descuadra,
+// avisa en ese momento; y recuerda cuándo fue la última vez que cuadró para listar todo lo que
+// se registró desde entonces.
+function _tsDeId(id){ const n=Math.floor(Number(id)); return (n>1.6e12 && n<4e12) ? n : 0; }
+function registrosDesdeTs(ts){
+  const out=[];
+  const add=(id,tipo,desc,monto,fecha)=>{ const t=_tsDeId(id); if(t>ts) out.push({t,tipo,desc:(desc||'').trim(),monto,fecha}); };
+  (S.ingresos||[]).forEach(x=>add(x.id,'Ingreso',[x.clienteNombre,x.desc].filter(Boolean).join(' · '),x.monto,x.fecha));
+  (S.egresos||[]).forEach(x=>add(x.id,'Egreso',[x.suplidorNombre,x.desc].filter(Boolean).join(' · '),x.monto,x.fecha));
+  (S.cuentasCobrar||[]).forEach(x=>{
+    add(x.id,'Factura de venta',[x.invoice,x.client].filter(Boolean).join(' · '),x.amount,x.issued);
+    (x.pagos||[]).forEach(pg=>add(pg.id,'Cobro de factura',[x.invoice,x.client].filter(Boolean).join(' · '),pg.netAmount!=null?pg.netAmount:pg.amount,pg.date));
+  });
+  ['proveedores','serviciosFijos','prestamos','otros'].forEach(k=>(S.cuentasPagar&&S.cuentasPagar[k]||[]).forEach(x=>{
+    add(x.id,'Cuenta por pagar',[x.nombre,x.concepto].filter(Boolean).join(' · '),x.monto,x.fecha);
+    (x.pagos||[]).forEach(pg=>add(pg.id,'Pago de cuenta por pagar',[x.nombre,x.concepto].filter(Boolean).join(' · '),pg.amount,pg.date));
+  }));
+  (S.distribuciones||[]).forEach(x=>add(x.id,'Distribución de utilidades',x.desc||x.concepto||'',x.monto,x.fecha));
+  (S.activosFijos||[]).forEach(x=>add(x.id,'Activo fijo',x.nombre,x.monto,x.fecha));
+  return out.sort((a,b)=>a.t-b.t);
+}
+function _fmtMomento(ts){
+  const d=new Date(ts); const p=n=>String(n).padStart(2,'0');
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} a las ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function bloqueRegistrosDesdeUltimoCuadre(){
+  const v=S.cuadreVigia||{};
+  const caja=(h)=>`<div style="margin-top:10px;border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:14px 16px;font-size:15px;color:#c0c6d8;text-align:left;">${h}</div>`;
+  if(!v.okTs) return caja('Todavía no tengo registro de cuándo cuadró por última vez. Desde ahora el sistema lo vigila solo y te avisará en el momento en que algo lo descuadre.');
+  const lista=registrosDesdeTs(v.okTs);
+  const filas=lista.length
+    ? lista.map(r=>`<div style="padding:4px 0;border-bottom:1px solid var(--border2);">• <strong>${esc(r.tipo)}</strong>${r.desc?' — '+esc(r.desc):''} — ${fmt(r.monto||0)}${r.fecha?' — fecha '+fmtDate(r.fecha):''}</div>`).join('')
+    : '<div>No encontré registros nuevos desde entonces.</div>';
+  return caja(`<div style="margin-bottom:8px;">El balance cuadraba hasta el <strong>${_fmtMomento(v.okTs)}</strong>. Desde entonces se registró:</div>${filas}<div style="margin-top:10px;color:#8899bb;font-size:14px;">Si el culpable no está en esta lista, puede ser algo que editaste o eliminaste, o un movimiento manual en un banco.</div>`);
+}
+let _vigiaTimer=null;
+function programarVigiaCuadre(){ clearTimeout(_vigiaTimer); _vigiaTimer=setTimeout(vigiaCuadre,900); }
+function vigiaCuadre(){
+  try{ window._cuadreEstado=null; renderBalanceGeneral(); }catch(e){ console.warn('Vigía del cuadre:',e); }
+  const est=window._cuadreEstado; if(!est) return;
+  const v=S.cuadreVigia=S.cuadreVigia||{};
+  const rojo=!est.cuadra && !est.esTemporal;
+  const antes=v.estado;
+  if(!rojo){
+    v.okTs=Date.now(); // se guarda con el próximo guardado normal, sin escribir de más
+    if(antes!=='ok'){
+      v.estado='ok'; save();
+      if(antes==='rojo') notifyQuick('success','Balance cuadrado','El Balance General volvió a cuadrar.');
+    }
+    return;
+  }
+  if(antes==='rojo') return;
+  v.estado='rojo';
+  const recientes=v.okTs?registrosDesdeTs(v.okTs):[];
+  save();
+  if(antes==='ok'){
+    const ult=recientes.slice(-3).map(r=>`• ${esc(r.tipo)}${r.desc?' — '+esc(r.desc):''} — ${fmt(r.monto||0)}`).join('<br>');
+    notify('error','⚠️ El balance dejó de cuadrar',`Con tu último registro, el Balance General dejó de cuadrar por <strong>${fmt(est.diferencia)}</strong>.${ult?'<br><br>Lo último que se registró:<br>'+ult:''}<br><br>Revísalo en Balance General: ahí aparece la lista completa de lo registrado desde la última vez que cuadró.`);
+  }
+}
+
 function renderBalanceGeneral(){
   // ── ACTIVOS ──
   let saldoBancos=0;
@@ -5767,13 +5834,16 @@ function renderBalanceGeneral(){
   // Mientras una factura de CxC siga pendiente de cobro, su parte NETA ya está cubierta por
   // "Ingresos Diferidos" (arriba) — lo único que de verdad queda sin resolver, a propósito, es
   // el ITBIS que esa factura trae embebido (cxcPendiente es bruto, ingresosDiferidos es neto).
-  const itbisFacturasPendientes = cxcPendiente - ingresosDiferidos;
+  // Solo cuenta el ITBIS de las pendientes emitidas ANTES del 27-ago-2026: el de las emitidas
+  // desde esa fecha ya está dentro de "ITBIS por Pagar" (itbisCausado), así que no genera diferencia.
+  const pendientesPreApertura = S.cuentasCobrar.filter(x=>!cxcEstaResuelta(x) && (x.issued||'')<CUTOVER_V2);
+  const itbisFacturasPendientes = pendientesPreApertura.reduce((s,x)=>s+cxcPending(x)-(x.subtotal||0),0);
   let msgDiferencia = '';
   let esTemporal = false; // true = causa conocida y esperable (ámbar) — false = de verdad no cuadra (rojo)
   if(!cuadra){
     if(Math.abs(diferencia - itbisFacturasPendientes) < 1){
       esTemporal = true;
-      msgDiferencia = `esto coincide con el <strong>ITBIS de tus facturas pendientes de cobro</strong> (${fmt(itbisFacturasPendientes)}) — es normal y temporal: ese ITBIS ya se lo debes a la DGII desde que emitiste la factura, pero solo lo recuperas cuando el cliente te paga. Se corrige solo en cuanto cobres esas facturas.`;
+      msgDiferencia = `esto coincide con el <strong>ITBIS de tus facturas pendientes emitidas antes del 27-ago-2026</strong> (${fmt(itbisFacturasPendientes)}) — es normal y temporal: ese ITBIS ya se resolvió antes de la V2.0, pero la factura sigue en Cuentas por Cobrar. Se corrige solo en cuanto cobres esas facturas.`;
     } else if(Math.abs(diferencia + cxpTotal) < 1){
       esTemporal = true;
       msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
@@ -5787,14 +5857,15 @@ function renderBalanceGeneral(){
       if(hayCorteBalance) posibles.push('los ajustes de "Corte de Balance" que sí tienes registrados');
       if(hayHistoricos) posibles.push('movimientos marcados como "Histórico" que sí tienes registrados');
       posibles.push('los montos de Activos Fijos (verifica que estén escritos correctamente)');
-      msgDiferencia = `no coincide con ninguna causa esperable automática (ITBIS de CxC pendiente, o CxP pendiente) — revisa ${posibles.join(', ')}. Si no encuentras la causa, dime qué registraste justo antes de ver este mensaje y lo rastreamos juntos.`;
+      msgDiferencia = `no coincide con ninguna causa esperable automática (ITBIS de CxC pendiente, o CxP pendiente) — revisa ${posibles.join(', ')}. Abajo te muestro todo lo que se registró desde la última vez que cuadró. Si no encuentras la causa ahí, mándame una captura de esta pantalla y lo rastreamos juntos.`;
     }
   }
+  window._cuadreEstado = {cuadra, esTemporal, diferencia};
   document.getElementById('bg-cuadre').innerHTML = cuadra
     ? `<div style="border:2px solid rgba(74,222,128,.4);border-radius:12px;padding:16px;text-align:center;color:#4ade80;font-weight:600;">✅ El Balance cuadra — Activos = Pasivos + Capital</div>`
     : esTemporal
     ? `<div style="border:2px solid rgba(253,201,1,.4);border-radius:12px;padding:16px;text-align:center;color:#fdc901;font-weight:600;">🟡 Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>`
-    : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>`;
+    : `<div style="border:2px solid rgba(239,68,68,.4);border-radius:12px;padding:16px;text-align:center;color:#ef4444;font-weight:600;">⚠️ Diferencia de cuadre: ${fmt(diferencia)} — ${msgDiferencia}</div>${bloqueRegistrosDesdeUltimoCuadre()}`;
 
   // Índice de Solvencia = Activos Totales ÷ Pasivos Totales — >1 significa que tienes más de lo
   // que debes (bien); <1 significa que debes más de lo que tienes (alerta).
@@ -5853,7 +5924,7 @@ function renderBalanceGeneral(){
         ${fila('CxP Préstamos (saldo)', cxpPorSeccion.prestamos, true)}
         ${fila('CxP Otros', cxpPorSeccion.otros, true)}
         ${fila('Total CxP', cxpTotal)}
-        ${fila('ITBIS Cobrado (histórico)', itbisCobradoHistorico, true)}
+        ${fila('ITBIS Causado en Ventas (desde 27-ago-2026)', itbisCausado, true)}
         ${fila('− Crédito Fiscal (ITBIS de compras)', -itbisCreditoFiscal, true)}
         ${fila('− Remesas ya pagadas a la DGII', -itbisRemesasPagadas, true)}
         ${fila('ITBIS por Pagar', itbisPorPagar)}
