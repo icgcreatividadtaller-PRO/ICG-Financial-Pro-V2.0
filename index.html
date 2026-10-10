@@ -3745,6 +3745,18 @@ function buscarTxVinculado(tipo,id){
   }
   return null;
 }
+// Respaldo para recibos anteriores a los vínculos: si no hay vínculo por ID, busca el movimiento sin
+// vínculo de la misma cuenta, fecha y monto cuyo texto sea de un recibo (o mencione su número).
+function buscarTxDeRecibo(r,tipo){
+  const v=buscarTxVinculado(tipo,r.id); if(v) return v;
+  const tipoTx = tipo==='recibo'?'ingreso':'egreso';
+  const cuentas = (r.cuentaIdx!=null && S.accounts[r.cuentaIdx]) ? [r.cuentaIdx] : S.accounts.map((_,i)=>i);
+  for(const k of cuentas){
+    const t=(S.accounts[k].transactions||[]).find(x=>!x.linkTipo && x.type===tipoTx && x.date===r.fecha && Math.abs(x.amount-r.monto)<0.01 && ((x.desc||'').includes(r.numero) || /^Recibo /.test(x.desc||'')));
+    if(t) return {idx:k,tx:t};
+  }
+  return null;
+}
 function quitarTx(idx,txId){ S.accounts[idx].transactions=S.accounts[idx].transactions.filter(x=>x.id!==txId); }
 function etiquetaOrigenTx(t){
   const m={ingreso:'un Ingreso',egreso:'un Egreso',recibo:'un Recibo de Ingreso',reciboEgreso:'un Recibo de Egreso',distribucion:'una Distribución de Utilidades',cxcPago:'el cobro de una factura (CxC)',cxpPago:'el pago de una cuenta por pagar (CxP)',ccPago:'un pago de Tarjeta de Crédito'};
@@ -6095,6 +6107,7 @@ function renderBitacora(){
     <h3>💾 Respaldos automáticos (en este navegador)</h3>
     <p style="font-size:14px;color:#8899bb;margin:0 0 10px;">Se crean solos cada hora de uso, al abrir el sistema y justo antes de cada eliminación o restauración. Guardan las últimas 24 copias y una por día durante 30 días. <strong>No reemplazan</strong> tu respaldo exportado: guarda también uno en tu computadora de vez en cuando.</p>
     <div style="margin-bottom:10px;"><button class="btn btn-primary" onclick="crearRespaldoManual()">Crear respaldo ahora</button></div>
+  <div class="transactions-section" style="margin-bottom:24px;"><h3>🔎 Revisar cobros duplicados</h3><p style="font-size:14px;color:#8899bb;margin:0 0 10px;">Busca abonos de facturas que quedaron registrados de más (Ingreso + movimiento de banco) y los quita juntos, sin descuadrar el Balance.</p><button class="btn btn-primary" onclick="revisarCobrosDuplicados()">Revisar y quitar duplicados</button></div>
     <div class="table-wrap"><table><thead><tr><th>Fecha y hora</th><th>Motivo</th><th>Contenido</th><th></th></tr></thead><tbody>
     ${_respaldos.length?_respaldos.slice(0,40).map(r=>`<tr><td class="td-mono">${fm(r.ts)}</td><td>${esc(r.motivo)}</td><td style="color:#8899bb;">${r.resumen.ingresos} ingresos · ${r.resumen.egresos} egresos · ${r.resumen.facturas} facturas · bancos ${fmt(r.resumen.bancos)} · ${r.resumen.kb} KB</td><td style="white-space:nowrap;"><button class="btn btn-primary" onclick="restaurarRespaldo(${r.id})">Restaurar</button> <button class="btn" onclick="descargarRespaldoGuardado(${r.id})">Descargar</button></td></tr>`).join(''):'<tr><td colspan="4"><div class="empty-state">Todavía no hay respaldos automáticos.</div></td></tr>'}
     </tbody></table></div>
@@ -6106,6 +6119,52 @@ function renderBitacora(){
     ${filas.length?filas.map(x=>`<tr><td class="td-mono">${fm(x.ts)}</td><td style="color:${colorAccion(x.accion)};font-weight:600;">${esc(x.accion)}</td><td>${esc(x.tipo)}</td><td style="max-width:420px;">${esc(x.detalle)}</td><td class="td-mono">${x.monto!=null?fmt(x.monto):'—'}</td></tr>`).join(''):'<tr><td colspan="5"><div class="empty-state">Aún no hay cambios registrados. Desde ahora, cada registro nuevo, cambio o eliminación queda aquí.</div></td></tr>'}
     </tbody></table></div>
   </div>`;
+}
+
+// ══════════════════ COBROS DUPLICADOS (Ingreso + movimiento de banco) ══════════════════
+// Busca Ingresos de cobros de facturas que sobran: (a) más de uno para el mismo abono, o (b) que no
+// corresponden a ningún abono de ninguna factura (por ejemplo, de una factura que se borró y se volvió a
+// cargar). Cada uno se quita JUNTO con su movimiento de banco, así el Balance sigue cuadrado.
+function encontrarCobrosDuplicados(){
+  const abonoIds=new Set(); S.cuentasCobrar.forEach(c=>{ (c.pagos||[]).forEach(p=>abonoIds.add(p.id)); });
+  const vistos=new Set(), sobran=[];
+  S.ingresos.forEach(i=>{
+    if(i.fuente!=='cxc') return;
+    const f=facturaDeIngreso(i);
+    const valido=abonoIds.has(i.fuenteId) || (f && f.id===i.fuenteId);
+    const clave='p'+i.fuenteId;
+    if(valido && !vistos.has(clave)){ vistos.add(clave); return; }
+    sobran.push({ing:i, motivo: valido?'repetido (mismo abono registrado dos veces)':'no corresponde a ningún abono de factura existente'});
+  });
+  const usados=new Set();
+  return sobran.map(o=>{
+    const i=o.ing; let v=null;
+    if(!i.esHistorico){
+      v=buscarTxVinculado('cxcPago',i.fuenteId);
+      if(v && usados.has(v.tx.id)) v=null;
+      if(!v){ // sin vínculo: misma cuenta, fecha y monto, y que sea de un cobro
+        for(let k=0;k<S.accounts.length && !v;k++){
+          const t=(S.accounts[k].transactions||[]).find(x=>x.type==='ingreso' && x.date===i.fecha && Math.abs(x.amount-i.monto)<0.01 && /^CxC /.test(x.desc||'') && !usados.has(x.id));
+          if(t) v={idx:k,tx:t};
+        }
+      }
+      if(v) usados.add(v.tx.id);
+    }
+    return {...o, vinc:v};
+  });
+}
+function revisarCobrosDuplicados(){
+  const lista=encontrarCobrosDuplicados();
+  if(!lista.length){ icgAlert('No encontré ningún cobro duplicado ni suelto. Cada Ingreso de cobro corresponde a un abono de una factura.<br><br>Si ves dos filas iguales, mándame una captura de las dos para revisar si tienen distinta factura o fecha.','Sin Duplicados'); return Promise.resolve(false); }
+  const det=lista.map(o=>`• ${fmtDate(o.ing.fecha)} — ${esc(o.ing.clienteNombre||'')} — ${esc(o.ing.desc||'')} — ${fmt(o.ing.monto)}<br>&nbsp;&nbsp;&nbsp;<span style="color:#fdc901;">${o.motivo}</span>${o.vinc?` · también se quita su movimiento en <strong>${esc(S.accounts[o.vinc.idx].name)}</strong>`:' · (no tiene movimiento de banco)'}`).join('<br>');
+  return icgConfirm(`Encontré <strong>${lista.length}</strong> cobro(s) que sobran:<br><br>${det}<br><br>Se quitan junto con su movimiento de banco, y el Balance sigue cuadrado. Queda una copia de seguridad y puedes restaurarlo desde la Papelera.`,'Quitar Cobros Duplicados','Quitar',true).then(ok=>{
+    if(!ok) return false;
+    respaldoAuto('Antes de quitar cobros duplicados',{min:0});
+    lista.forEach(o=>{ if(o.vinc) quitarTx(o.vinc.idx,o.vinc.tx.id); S.ingresos=S.ingresos.filter(x=>x.id!==o.ing.id); });
+    save(); try{ renderIngresos(); renderConsolidated(); renderCXC(); if(typeof renderBitacora==='function') renderBitacora(); }catch(e){}
+    notify('success','Duplicados Quitados',`${lista.length} cobro(s) quitado(s) con su movimiento de banco.`);
+    return true;
+  });
 }
 
 // ══════════════════ VIGÍA DEL CUADRE ══════════════════
@@ -7734,7 +7793,7 @@ function addRecibo(){
 function delRecibo(id){
   const r=S.recibos.find(x=>x.id===id); if(!r) return Promise.resolve(false);
   const ing=S.ingresos.find(x=>x.fuente==='recibo' && x.fuenteId===id);
-  const vinc=buscarTxVinculado('recibo',id);
+  const vinc=buscarTxDeRecibo(r,'recibo');
   const partes=[]; if(ing) partes.push('el Ingreso del Estado de Resultados'); if(vinc) partes.push(`el movimiento de ${fmt(vinc.tx.amount)} en <strong>${esc(S.accounts[vinc.idx].name)}</strong>`);
   const msg = partes.length ? `Al eliminar este recibo también se eliminan ${partes.join(' y ')}, para que todo quede en cero. ¿Continuar?` : '¿Eliminar este recibo?';
   return icgConfirm(msg,'Eliminar Recibo','Eliminar',true).then(ok=>{
@@ -9482,7 +9541,7 @@ function addReciboEgreso(){
 function delReciboEgreso(id){
   const r=S.recibosEgreso.find(x=>x.id===id); if(!r) return Promise.resolve(false);
   const egr=S.egresos.find(x=>x.fuente==='reciboEgreso' && x.fuenteId===id);
-  const vinc=buscarTxVinculado('reciboEgreso',id);
+  const vinc=buscarTxDeRecibo(r,'reciboEgreso');
   const partes=[]; if(egr) partes.push('el Egreso del Estado de Resultados'); if(vinc) partes.push(`el movimiento de ${fmt(vinc.tx.amount)} en <strong>${esc(S.accounts[vinc.idx].name)}</strong>`);
   const msg = partes.length ? `Al eliminar este recibo también se eliminan ${partes.join(' y ')}, para que todo quede en cero. ¿Continuar?` : '¿Eliminar este recibo?';
   return icgConfirm(msg,'Eliminar Recibo','Eliminar',true).then(ok=>{
