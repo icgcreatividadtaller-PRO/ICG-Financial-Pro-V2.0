@@ -629,9 +629,33 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 //# sourceMappingURL=firebase-auth-compat.js.map
 </script>
 <!-- ══ Fase 1: librerías OCR para Cargar Comprobante (Tesseract.js + PDF.js) ══ -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* Librerías externas: se cargan SOLO cuando se usan (OCR, lector de PDF, exportar a Excel).
+   Cada una admite una huella SRI (integrity): si se rellena, el navegador rechaza el archivo
+   si alguien lo hubiera alterado. Vacío = se carga sin verificar la huella. */
+const LIBS_EXT={
+  ocr :{url:'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js',sri:'',ok:()=>!!window.Tesseract},
+  pdf :{url:'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',sri:'',ok:()=>!!window.pdfjsLib},
+  xlsx:{url:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',sri:'',ok:()=>!!window.XLSX}
+};
+const PDF_WORKER_URL='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const _libsProm={};
+function cargarLibreria(nombre){
+  const L=LIBS_EXT[nombre];
+  if(!L) return Promise.reject(new Error('Librería desconocida: '+nombre));
+  if(L.ok()) return Promise.resolve();
+  if(_libsProm[nombre]) return _libsProm[nombre];
+  _libsProm[nombre]=new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src=L.url; sc.crossOrigin='anonymous'; sc.referrerPolicy='no-referrer';
+    if(L.sri) sc.integrity=L.sri;
+    sc.onload=()=>L.ok()?res():(delete _libsProm[nombre],rej(new Error('La librería '+nombre+' no se inicializó.')));
+    sc.onerror=()=>{delete _libsProm[nombre];rej(new Error('No se pudo cargar la librería ('+nombre+') — verifica tu conexión e intenta de nuevo.'));};
+    document.head.appendChild(sc);
+  });
+  return _libsProm[nombre];
+}
+</script>
 </head>
 <body>
 
@@ -2986,9 +3010,32 @@ ensureEstadoIntegro();
 // PLAN_CUENTAS/ING_CAT_LABELS/EGR_CAT_LABELS (declarados más abajo con const) ya existen.
 
 let renameTarget=-1;
+// Copia local (localStorage): sirve de respaldo sin conexión mientras hay sesión abierta.
+// Al cerrar sesión (o si no hay sesión) se borra, para no dejar datos financieros sin cifrar
+// en el navegador. _sinCopiaLocal evita que se vuelva a escribir mientras no hay sesión.
+let _sinCopiaLocal=false;
+function limpiarCopiaLocal(){ _sinCopiaLocal=true; try{ localStorage.removeItem(STORE_KEY); }catch(e){} }
+// Aviso de tamaño: Firestore limita cada documento a 1 MiB (1,048,576 bytes).
+const LIMITE_DOC_BYTES=1048576, AVISO_DOC_BYTES=700*1024, CRITICO_DOC_BYTES=900*1024;
+let _avisoTamNivel=0;
+function tamanoDocBytes(json){ try{ return new TextEncoder().encode(json!=null?json:JSON.stringify(S)).length; }catch(e){ return (json||'').length; } }
+function vigilarTamano(json){
+  const b=tamanoDocBytes(json), kb=Math.round(b/1024);
+  const nivel=b>=CRITICO_DOC_BYTES?2:(b>=AVISO_DOC_BYTES?1:0);
+  if(nivel>_avisoTamNivel){
+    _avisoTamNivel=nivel;
+    try{ notify(nivel===2?'error':'warning','Base de datos casi llena',
+      `Los datos ocupan ${kb} KB de 1,024 KB que permite la nube (${Math.round(b/LIMITE_DOC_BYTES*100)}%). `+
+      (nivel===2?'<strong>Ya casi no hay espacio:</strong> pronto el guardado en la nube fallará. ':'')+
+      'Descarga un respaldo y avisa para dividir los datos en varios documentos antes de que se llene.'); }catch(e){}
+  }
+  return b;
+}
 function save(){
   // Instant local backup
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch(e){}
+  let _json=null;
+  try { _json=JSON.stringify(S); if(!_sinCopiaLocal) localStorage.setItem(STORE_KEY, _json); } catch(e){}
+  try{ vigilarTamano(_json); }catch(e){}
   markSavingNow();
   // Marca la versión YA (optimista): la pantalla ya refleja este cambio, así que cualquier
   // snapshot remoto que llegue con una versión igual o anterior a esta debe ser ignorado,
@@ -3552,7 +3599,7 @@ function accountHTML(i){
   const acc=S.accounts[i];
   return `
   <div class="account-top">
-    <div class="account-name-area"><h2 id="accTitle-${i}">${acc.name}</h2><p>Historial de movimientos</p></div>
+    <div class="account-name-area"><h2 id="accTitle-${i}">${esc(acc.name)}</h2><p>Historial de movimientos</p></div>
     <div class="balance-cards" id="balcards-acc-${i}">
       <div class="bcard" style="border-color:#818cf844;background:rgba(129,140,248,.04);"><div class="bcard-label">Balance Inicial</div><div class="bcard-value" style="color:#818cf8;" id="initBD-${i}">${fmt(acc.initialBalance)}</div></div>
       <div class="bcard"><div class="bcard-label">Ingresos</div><div class="bcard-value positive" id="tInc-${i}">RD$0.00</div></div>
@@ -3639,7 +3686,7 @@ function onFTypeChange(i){
 function populateRelatedAccounts(i){
   const sel=document.getElementById(`f-related-${i}`);
   if(!sel)return;
-  const opts=S.accounts.map((a,idx)=>idx===i?'':`<option value="${idx}">${a.name}</option>`).filter(Boolean).join('');
+  const opts=S.accounts.map((a,idx)=>idx===i?'':`<option value="${idx}">${esc(a.name)}</option>`).filter(Boolean).join('');
   sel.innerHTML=`<option value="">— Transferencia externa (sin cuenta relacionada) —</option>${opts}`;
 }
 
@@ -3674,7 +3721,7 @@ function addTx(i){
   const dup=buscarPosibleDuplicado('interno',amount,date,ref);
   if(dup){
     icgConfirm(
-      `Ya existe un movimiento parecido: ${dup.detalle}. ¿Confirmas que quieres registrar este también?`,
+      `Ya existe un movimiento parecido: ${esc(dup.detalle)}. ¿Confirmas que quieres registrar este también?`,
       '⚠️ Posible Duplicado',
       'Sí, registrar de todos modos',
       true,
@@ -3915,7 +3962,7 @@ function saveIB(i){
 function renderCCPanel(){
   const cc=S.creditCard;
   const sel=document.getElementById('cc-linked-account');
-  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}" ${i===cc.linkedAccountIdx?'selected':''}>${a.name}</option>`).join('');
+  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}" ${i===cc.linkedAccountIdx?'selected':''}>${esc(a.name)}</option>`).join('');
   document.getElementById('cc-name').value=cc.name||'';
   if(cc.creditLimit) setMontoValue('cc-limit',cc.creditLimit); else document.getElementById('cc-limit').value='';
   // Show formatted values in card inputs
@@ -4137,7 +4184,7 @@ function checkDupInvoice(input){
 function refreshCxCCatSelect(val){
   const sel=document.getElementById('cxc-categoria');if(!sel)return;
   const cats=getAllIngCats(); // reuse ing cats for CxC
-  sel.innerHTML='<option value="">Sin categoría</option>'+cats.map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+  sel.innerHTML='<option value="">Sin categoría</option>'+cats.map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
   if(val && sel.querySelector(`option[value="${val}"]`)) sel.value=val;
 }
 function addCustomCCCat(){
@@ -4647,7 +4694,7 @@ function openPayModal(id){
   calcPayNet();
   document.getElementById('pay-ref').value='';
   const sel=document.getElementById('pay-bank');
-  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${a.name}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`;
+  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`;
   document.getElementById('pay-date').value=today();
   document.getElementById('pay-method').value='transferencia';
   onPayMethodChange(document.getElementById('pay-method'));
@@ -5181,7 +5228,7 @@ function buildCXPForm(section){
     } else {
       input = `<input autocomplete="off" type="${f.type}" id="cxp-f-${f.id}" placeholder="${f.placeholder||''}" min="0" step="${f.type==='number'?'0.01':''}">`;
     }
-    return `<div class="form-group" style="${spanStyle}"><label>${f.label}</label>${input}</div>`;
+    return `<div class="form-group" style="${spanStyle}"><label>${esc(f.label)}</label>${input}</div>`;
   }).join('');
 
   // Build table header
@@ -5241,7 +5288,7 @@ function addCXP(){
     _editingCXPId = null; _editingCXPSection = null;
     save(); renderCXP();
     renderCxpFormActions();
-    notify('success','Actualizado',`${fieldsData.nombre} se actualizó correctamente.`);
+    notify('success','Actualizado',`${esc(fieldsData.nombre)} se actualizó correctamente.`);
     return;
   }
 
@@ -5335,7 +5382,7 @@ function renderAgingWidget(elId, buckets, tipo){
         const b=buckets[t.key];
         const clickable = b.total>0;
         return `<div onclick="${clickable?`openAgingModal('${tipo}','${t.key}')`:''}" style="text-align:center;padding:12px 8px;background:var(--s3);border-radius:8px;border-top:3px solid ${t.color};${clickable?'cursor:pointer;transition:transform .12s,background .12s;':'opacity:.55;'}" ${clickable?`onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.transform='translateY(-2px)';" onmouseout="this.style.background='var(--s3)';this.style.transform='none';"`:''}>
-        <div style="font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">${t.label}</div>
+        <div style="font-size:13px;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">${esc(t.label)}</div>
         <div style="font-family:var(--mono);font-size:17px;font-weight:600;color:${t.color};">${fmt(b.total)}</div>
         <div style="font-size:12px;color:#6b7a99;margin-top:2px;">${total>0?(b.total/total*100).toFixed(0):0}% ${clickable?'· Ver detalle':''}</div>
       </div>`;}).join('')}</div>`;
@@ -6037,7 +6084,7 @@ async function descargarRespaldoGuardado(id){
 async function restaurarRespaldo(id){
   const json=await _leerRespaldo(id); if(!json){ notify('error','No Disponible','No se pudo leer ese respaldo.'); return; }
   const meta=_respaldos.find(x=>x.id===id);
-  const ok=await icgConfirm(`Vas a volver el sistema completo al estado del <strong>${_fmtMomento(id)}</strong>${meta?` (${meta.motivo})`:''}. Todo lo registrado DESPUÉS de ese momento se perderá. Antes de hacerlo se guarda una copia del estado actual, por si cambias de idea. ¿Continuar?`,'Restaurar Respaldo','Restaurar');
+  const ok=await icgConfirm(`Vas a volver el sistema completo al estado del <strong>${_fmtMomento(id)}</strong>${meta?` (${esc(meta.motivo)})`:''}. Todo lo registrado DESPUÉS de ese momento se perderá. Antes de hacerlo se guarda una copia del estado actual, por si cambias de idea. ¿Continuar?`,'Restaurar Respaldo','Restaurar');
   if(!ok) return;
   bitacoraAhora(); respaldoAuto('Antes de restaurar un respaldo',{min:0});
   let data; try{ data=JSON.parse(json); }catch(e){ notify('error','Respaldo Dañado','No se pudo leer ese respaldo.'); return; }
@@ -6403,7 +6450,7 @@ function openCXPPayModal(section, id){
   document.getElementById('cxp-pay-method').value = 'transferencia';
 
   const sel = document.getElementById('cxp-pay-account');
-  sel.innerHTML = S.accounts.map((a,i)=>`<option value="${i}">${a.name}</option>`).join('');
+  sel.innerHTML = S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('');
   document.getElementById('cxpPayModal').classList.add('open');
 }
 
@@ -6682,7 +6729,7 @@ function renderComparativo(){
     </div>
     ${[...filas].reverse().map(f=>`
     <div style="display:grid;grid-template-columns:120px 340px 340px 140px;gap:14px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border2);">
-      <div style="font-size:16px;color:#c0c6d8;">${f.label}</div>
+      <div style="font-size:16px;color:#c0c6d8;">${esc(f.label)}</div>
       <div>
         <div style="background:var(--s3);border-radius:4px;height:13px;overflow:hidden;max-width:280px;"><div style="background:#4ade80;height:100%;width:${(f.ing/maxVal*100).toFixed(1)}%;opacity:.85;"></div></div>
         <div style="font-size:16px;color:#4ade80;margin-top:3px;font-family:var(--mono);">${fmt(f.ing)}</div>
@@ -6770,7 +6817,7 @@ function diagnosticarCuentaPorCuenta(){
     return {nombre:acc.name, cambioRealSinTransferencias, transferenciasNetas, esperado, diff};
   });
   const conDiferencia = filas.filter(f=>Math.abs(f.diff)>=1);
-  const detalle = filas.map(f=>`${f.nombre}: movimientos propios ${fmt(f.cambioRealSinTransferencias)}${Math.abs(f.transferenciasNetas)>=1?' (+ transferencias '+fmt(f.transferenciasNetas)+')':''} vs esperado ${fmt(f.esperado)} → ${Math.abs(f.diff)<1?'✅ coincide':'⚠️ <strong>diferencia de '+fmt(f.diff)+'</strong>'}`).join('<br>');
+  const detalle = filas.map(f=>`${esc(f.nombre)}: movimientos propios ${fmt(f.cambioRealSinTransferencias)}${Math.abs(f.transferenciasNetas)>=1?' (+ transferencias '+fmt(f.transferenciasNetas)+')':''} vs esperado ${fmt(f.esperado)} → ${Math.abs(f.diff)<1?'✅ coincide':'⚠️ <strong>diferencia de '+fmt(f.diff)+'</strong>'}`).join('<br>');
   if(!conDiferencia.length){
     icgAlert(`Todas las cuentas coinciden (ya excluyendo transferencias internas legítimas):<br><br>${detalle}<br><br>La causa del descuadre general está en otra parte (CxC/CxP, ITBIS, o Activos Fijos) — no en un desajuste banco-por-banco.`,'Todas las Cuentas Cuadran');
   } else {
@@ -7007,11 +7054,11 @@ function openReport(idx,mode){
         const i=txs.filter(t=>t.type==='ingreso').reduce((s,t)=>s+t.amount,0);
         const e=txs.filter(t=>(t.type==='egreso'||t.type==='impuesto')).reduce((s,t)=>s+t.amount,0);
         ti+=i; te+=e;
-        if(txs.length) rows+=`<div class="report-row"><span>${acc.name}</span><span>↑${fmt(i)} ↓${fmt(e)} <b style="color:${i-e>=0?'#818cf8':'#ef4444'}">${fmt(i-e)}</b></span></div>`;
+        if(txs.length) rows+=`<div class="report-row"><span>${esc(acc.name)}</span><span>↑${fmt(i)} ↓${fmt(e)} <b style="color:${i-e>=0?'#818cf8':'#ef4444'}">${fmt(i-e)}</b></span></div>`;
       });
       if(!rows)return;
       const net=ti-te;
-      html+=`<div class="report-block"><h4>${p.label}</h4>${rows}<div class="report-total"><span>Total</span><span style="color:${net>=0?'#818cf8':'#ef4444'}">${fmt(net)}</span></div></div>`;
+      html+=`<div class="report-block"><h4>${esc(p.label)}</h4>${rows}<div class="report-total"><span>Total</span><span style="color:${net>=0?'#818cf8':'#ef4444'}">${fmt(net)}</span></div></div>`;
     });
   } else {
     const acc=S.accounts[idx];
@@ -7024,7 +7071,7 @@ function openReport(idx,mode){
       const cI=txs.filter(t=>t.type==='ingreso'&&t.method==='efectivo').reduce((s,t)=>s+t.amount,0);
       const trE=txs.filter(t=>t.type==='egreso'&&t.method==='transferencia').reduce((s,t)=>s+t.amount,0);
       const cE=txs.filter(t=>t.type==='egreso'&&t.method==='efectivo').reduce((s,t)=>s+t.amount,0);
-      html+=`<div class="report-block"><h4>${p.label}</h4>
+      html+=`<div class="report-block"><h4>${esc(p.label)}</h4>
         ${trI>0?`<div class="report-row"><span>↑ Ingresos Transferencia</span><span style="color:#818cf8">${fmt(trI)}</span></div>`:''}
         ${cI>0?`<div class="report-row"><span>↑ Ingresos Efectivo</span><span style="color:#818cf8">${fmt(cI)}</span></div>`:''}
         ${trE>0?`<div class="report-row"><span>↓ Egresos Transferencia</span><span style="color:#ef4444">${fmt(trE)}</span></div>`:''}
@@ -7071,7 +7118,7 @@ function confirmRename(){
   renderAccountSubNav();
   switchAccount(_activeAccount);
   closeRename();
-  document.getElementById('cc-linked-account').innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${a.name}</option>`).join('');
+  document.getElementById('cc-linked-account').innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('');
   refreshCXCBankSelect();
 }
 document.getElementById('renameInput').addEventListener('keydown',e=>{if(e.key==='Enter')confirmRename();if(e.key==='Escape')closeRename();});
@@ -7131,7 +7178,7 @@ function handleImportFile(event){
     let data;
     try{ data=JSON.parse(e.target.result); }
     catch{ notify('error','Error de Importación','El archivo no es válido.'); return; }
-    icgConfirm(`¿Importar "${file.name}"? Esto reemplazará todos los datos actuales.`,'Importar Datos','Importar',false).then(ok=>{
+    icgConfirm(`¿Importar "${esc(file.name)}"? Esto reemplazará todos los datos actuales.`,'Importar Datos','Importar',false).then(ok=>{
       if(!ok)return;
       if(Array.isArray(data)){
         // Formato antiguo: solo un array de cuentas — se conserva por compatibilidad hacia atrás.
@@ -7238,7 +7285,7 @@ function deleteCliente(id){
   if(!cliente) return;
   const pendientes=S.cuentasCobrar.filter(x=>x.clientId===id && !cxcEstaResuelta(x));
   const msg = pendientes.length
-    ? `${cliente.nombre} todavía tiene ${pendientes.length} factura(s) de CxC sin cobrar por un total de ${fmt(pendientes.reduce((s,x)=>s+cxcPending(x),0))}. Las facturas seguirán existiendo, pero perderás el acceso fácil a este contacto mientras la deuda sigue abierta. ¿Eliminar de todos modos?`
+    ? `${esc(cliente.nombre)} todavía tiene ${pendientes.length} factura(s) de CxC sin cobrar por un total de ${fmt(pendientes.reduce((s,x)=>s+cxcPending(x),0))}. Las facturas seguirán existiendo, pero perderás el acceso fácil a este contacto mientras la deuda sigue abierta. ¿Eliminar de todos modos?`
     : '¿Eliminar este cliente del directorio?';
   icgConfirm(msg,'Eliminar Cliente','Eliminar',true).then(ok=>{if(!ok)return;S.clientes=S.clientes.filter(x=>x.id!==id);save();renderClientes();});
 }
@@ -7332,7 +7379,7 @@ function deleteSuplidor(id){
   const nombreNorm=normalizarTexto(suplidor.nombre);
   const pendientes=Object.values(S.cuentasPagar).flat().filter(x=>x.estado!=='pagada' && normalizarTexto(x.nombre)===nombreNorm);
   const msg = pendientes.length
-    ? `${suplidor.nombre} todavía tiene ${pendientes.length} registro(s) de CxP sin pagar por un total de ${fmt(pendientes.reduce((s,x)=>s+cxpPending(x),0))}. Los registros seguirán existiendo, pero perderás el acceso fácil a este contacto mientras la deuda sigue abierta. ¿Eliminar de todos modos?`
+    ? `${esc(suplidor.nombre)} todavía tiene ${pendientes.length} registro(s) de CxP sin pagar por un total de ${fmt(pendientes.reduce((s,x)=>s+cxpPending(x),0))}. Los registros seguirán existiendo, pero perderás el acceso fácil a este contacto mientras la deuda sigue abierta. ¿Eliminar de todos modos?`
     : '¿Eliminar este beneficiario del directorio?';
   icgConfirm(msg,'Eliminar Beneficiario','Eliminar',true).then(ok=>{if(!ok)return;S.suplidores=S.suplidores.filter(x=>x.id!==id);save();renderSuplidores();});
 }
@@ -7544,7 +7591,7 @@ const PLAN_CUENTAS = [
   {code:'5032',nombre:'Aporte Patronal INFOTEP',nivel:2,tipo:'gasto',parent:'5000'},
 ];
 function cuentaByCode(code){ return PLAN_CUENTAS.find(c=>c.code===code); }
-function cuentaLabel(code){ const c=cuentaByCode(code); return c?`${c.code} - ${c.nombre}`:code||'—'; }
+function cuentaLabel(code){ const c=cuentaByCode(code); return c?`${c.code} - ${esc(c.nombre)}`:code||'—'; }
 function leafAccounts(tipo){ return PLAN_CUENTAS.filter(c=>c.nivel===2 && c.tipo===tipo); }
 
 // Mapeo por defecto: cómo se clasifica cada categoría existente de Ingresos/Egresos
@@ -7650,7 +7697,7 @@ function refreshIngresoSelects(){
   const ingCatSel=document.getElementById('ing-categoria');
   if(ingCatSel){
     const curVal=ingCatSel.value;
-    ingCatSel.innerHTML=getSelectableIngCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    ingCatSel.innerHTML=getSelectableIngCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
     if(curVal && ingCatSel.querySelector(`option[value="${curVal}"]`)) ingCatSel.value=curVal;
   }
   // Recibos de Ingreso usa los mismos clientes/cuentas/categorías
@@ -7661,7 +7708,7 @@ function refreshIngresoSelects(){
   const recCatSel=document.getElementById('rec-categoria');
   if(recCatSel){
     const curVal=recCatSel.value;
-    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableIngCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableIngCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
     if(curVal && recCatSel.querySelector(`option[value="${curVal}"]`)) recCatSel.value=curVal;
   }
 }
@@ -7727,7 +7774,7 @@ function addIngreso(auto=false,data={}){
     const dup=buscarPosibleDuplicado('cliente',monto,fecha,ref);
     if(dup){
       icgConfirm(
-        `Ya existe un registro parecido: ${dup.detalle}. ¿Confirmas que quieres registrar este ingreso también?`,
+        `Ya existe un registro parecido: ${esc(dup.detalle)}. ¿Confirmas que quieres registrar este ingreso también?`,
         '⚠️ Posible Duplicado',
         'Sí, registrar de todos modos',
         true,
@@ -8001,12 +8048,14 @@ async function handleFacturaCompraFile(input){
       if((texto||'').trim().length<40){
         document.getElementById('fc-processing-msg').textContent='No parece tener texto — leyendo como imagen (esto puede tardar más)...';
         const canvas=await renderizarPrimeraPaginaPDF(file);
+        await cargarLibreria('ocr');
         const {data:{text}}=await Tesseract.recognize(canvas,'spa');
         texto=text;
       }
     } else {
       document.getElementById('fc-processing-msg').textContent='Leyendo imagen...';
-      const {data:{text}}=await Tesseract.recognize(file,'spa');
+      await cargarLibreria('ocr');
+        const {data:{text}}=await Tesseract.recognize(file,'spa');
       texto=text;
     }
     onFacturaCompraTextoListo(texto);
@@ -8279,12 +8328,14 @@ async function handleFacturaFile(input){
         // Se cae a OCR como respaldo, igual que en Cargar Comprobante.
         document.getElementById('cf-processing-msg').textContent='No parece tener texto — leyendo como imagen (esto puede tardar más)...';
         const canvas=await renderizarPrimeraPaginaPDF(file);
+        await cargarLibreria('ocr');
         const {data:{text}}=await Tesseract.recognize(canvas,'spa');
         texto=text;
       }
     } else {
       document.getElementById('cf-processing-msg').textContent='Leyendo imagen...';
-      const {data:{text}}=await Tesseract.recognize(file,'spa');
+      await cargarLibreria('ocr');
+        const {data:{text}}=await Tesseract.recognize(file,'spa');
       texto=text;
     }
     onFacturaTextoListo(texto);
@@ -8299,8 +8350,8 @@ async function handleFacturaFile(input){
 // por posición vertical — así los regex de campos pueden leerlo de forma parecida a
 // como se ve el documento, en vez de recibir el texto en cualquier orden.
 async function extraerTextoPDF(file){
-  if(!window.pdfjsLib) throw new Error('El lector de PDF no cargó — verifica tu conexión e intenta de nuevo.');
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  await cargarLibreria('pdf');
+  pdfjsLib.GlobalWorkerOptions.workerSrc=PDF_WORKER_URL;
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
   const page=await pdf.getPage(1);
@@ -8589,7 +8640,8 @@ async function handleComprobanteFile(input){
       ocrSource=await renderizarPrimeraPaginaPDF(file);
     }
     document.getElementById('comp-processing-msg').textContent='Leyendo comprobante (esto puede tardar unos segundos)...';
-    const {data:{text}}=await Tesseract.recognize(ocrSource,'spa');
+    await cargarLibreria('ocr');
+        const {data:{text}}=await Tesseract.recognize(ocrSource,'spa');
     onComprobanteOCRListo(text);
   }catch(err){
     console.error(err);
@@ -8599,8 +8651,8 @@ async function handleComprobanteFile(input){
 }
 
 async function renderizarPrimeraPaginaPDF(file){
-  if(!window.pdfjsLib){ throw new Error('El lector de PDF no cargó — verifica tu conexión e intenta de nuevo.'); }
-  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  await cargarLibreria('pdf');
+  pdfjsLib.GlobalWorkerOptions.workerSrc=PDF_WORKER_URL;
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
   const page=await pdf.getPage(1);
@@ -8871,7 +8923,7 @@ function guardarEditRef(){
     const dup = buscarPosibleDuplicado(dupTipo, monto, fecha, nuevaRef, id);
     if(dup){
       icgConfirm(
-        `Ya existe un registro parecido: ${dup.detalle}. ¿Confirmas que quieres guardar esta referencia de todos modos?`,
+        `Ya existe un registro parecido: ${esc(dup.detalle)}. ¿Confirmas que quieres guardar esta referencia de todos modos?`,
         '⚠️ Posible Duplicado',
         'Sí, guardar de todos modos',
         true,
@@ -8887,7 +8939,7 @@ function renderAvisoDuplicado(tipo, monto, fecha, referencia){
   const dup = buscarPosibleDuplicado(tipo, monto, fecha, referencia);
   if(!dup) return '';
   return `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:15px;color:#f0a8a8;">
-    ⚠️ <strong>Ya existe un movimiento parecido:</strong> ${dup.detalle}. Revisa si esto ya se registró antes de confirmar.
+    ⚠️ <strong>Ya existe un movimiento parecido:</strong> ${esc(dup.detalle)}. Revisa si esto ya se registró antes de confirmar.
   </div>`;
 }
 
@@ -9295,7 +9347,7 @@ function refreshEgresoSelects(){
   const egrCatSel=document.getElementById('egr-categoria');
   if(egrCatSel){
     const curVal=egrCatSel.value;
-    egrCatSel.innerHTML=getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    egrCatSel.innerHTML=getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
     if(curVal && egrCatSel.querySelector(`option[value="${curVal}"]`)) egrCatSel.value=curVal;
   }
   // Recibos de Egreso usa los mismos suplidores/cuentas/categorías
@@ -9306,7 +9358,7 @@ function refreshEgresoSelects(){
   const recCatSel=document.getElementById('recegr-categoria');
   if(recCatSel){
     const curVal=recCatSel.value;
-    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    recCatSel.innerHTML=`<option value="">— Selecciona —</option>`+getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
     if(curVal && recCatSel.querySelector(`option[value="${curVal}"]`)) recCatSel.value=curVal;
   }
   // CxP → Proveedores usa exactamente las mismas categorías que Egresos (antes tenía su propia
@@ -9315,7 +9367,7 @@ function refreshEgresoSelects(){
   const cxpCatSel=document.getElementById('cxp-f-categoriaEgreso');
   if(cxpCatSel){
     const curVal=cxpCatSel.value;
-    cxpCatSel.innerHTML='<option value="">— Selecciona —</option>'+getSelectableEgrCats().map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+    cxpCatSel.innerHTML='<option value="">— Selecciona —</option>'+getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
     if(curVal && cxpCatSel.querySelector(`option[value="${curVal}"]`)) cxpCatSel.value=curVal;
   }
 }
@@ -9399,7 +9451,7 @@ function addEgreso(auto=false,data={}){
       const dup=buscarPosibleDuplicado('suplidor',monto,fecha,ref);
       if(dup){
         icgConfirm(
-          `Ya existe un registro parecido: ${dup.detalle}. ¿Confirmas que quieres registrar este egreso también?`,
+          `Ya existe un registro parecido: ${esc(dup.detalle)}. ¿Confirmas que quieres registrar este egreso también?`,
           '⚠️ Posible Duplicado',
           'Sí, registrar de todos modos',
           true,
@@ -9737,7 +9789,7 @@ function renderRentabilidad(){
     bars+=`<rect x="${x}" y="${pT+iH-hI}" width="${bW}" height="${hI}" fill="#818cf8" rx="2" opacity=".82"/>`;
     bars+=`<rect x="${x+bW+gap/2}" y="${pT+iH-hE}" width="${bW}" height="${hE}" fill="#ef4444" rx="2" opacity=".82"/>`;
     const cx=x+bW+gap/4;
-    labs+=`<text x="${cx}" y="${H-6}" text-anchor="middle" fill="#9ca3af" font-size="10">${p.label}</text>`;
+    labs+=`<text x="${cx}" y="${H-6}" text-anchor="middle" fill="#9ca3af" font-size="10">${esc(p.label)}</text>`;
     if(p.util!==0){const uy=pT+iH-((p.util+maxV)/(2*maxV))*iH*0.45-8;bars+=`<circle cx="${cx}" cy="${uy}" r="3" fill="${p.util>=0?'#4f46e5':'#ef4444'}"/>`;}
   });
   document.getElementById('rent-chart').innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;">${grid}<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT+iH}" stroke="rgba(255,255,255,.08)"/><line x1="${pL}" y1="${pT+iH}" x2="${W-pR}" y2="${pT+iH}" stroke="rgba(255,255,255,.08)"/>${bars}${labs}<rect x="${W-120}" y="${pT}" width="10" height="10" fill="#818cf8" rx="2"/><text x="${W-106}" y="${pT+9}" fill="#9ca3af" font-size="10">Ingresos</text><rect x="${W-58}" y="${pT}" width="10" height="10" fill="#ef4444" rx="2"/><text x="${W-44}" y="${pT+9}" fill="#9ca3af" font-size="10">Egresos</text></svg>`;
@@ -9746,7 +9798,7 @@ function renderRentabilidad(){
     ?`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year} · desde ${fmtDate(desde)}`
     :`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year}`;
   document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos (sin ITBIS)</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
-  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${p.label}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
+  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${esc(p.label)}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
   // Category bars
   const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+(tipo==='egreso'?montoGastoPL(x):x.monto);});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).filter(([k,v])=>tipo!=='egreso'||v>0.004).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
   const ingY=S.ingresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
@@ -9862,7 +9914,7 @@ function openCorteModal(){
     const currentBal=(acc.initialBalance||0)+acc.transactions.filter(t=>t.type==='ingreso').reduce((s,t)=>s+t.amount,0)-acc.transactions.filter(t=>(t.type==='egreso'||t.type==='impuesto')).reduce((s,t)=>s+t.amount,0);
     return `<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;background:var(--s2);border:1px solid var(--border2);border-radius:5px;padding:12px 16px;">
       <div>
-        <div style="font-size:15px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:#e8eeff;">${acc.name}</div>
+        <div style="font-size:15px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:#e8eeff;">${esc(acc.name)}</div>
         <div style="font-size:15px;color:#8899bb;font-weight:400;margin-top:2px;">Balance actual calculado: <span style="color:var(--cyan);font-family:var(--mono);">${fmt(currentBal)}</span></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;min-width:180px;">
@@ -10539,7 +10591,7 @@ function generateReport(){
   const f3=document.getElementById('rep-f3')?.value||'';
   _repData=cfg.generate(d,h,f1,f2,f3);
   _repSortCol=null; _repSortDir='asc'; // cada reporte nuevo arranca en su orden natural
-  document.getElementById('rep-summary').innerHTML=cfg.summary(_repData).map(s=>`<div class="bcard" style="flex:1;min-width:140px;"><div class="bcard-label">${s.label}</div><div class="bcard-value" style="color:${s.color};font-size:20px;">${s.val}</div></div>`).join('');
+  document.getElementById('rep-summary').innerHTML=cfg.summary(_repData).map(s=>`<div class="bcard" style="flex:1;min-width:140px;"><div class="bcard-label">${esc(s.label)}</div><div class="bcard-value" style="color:${s.color};font-size:20px;">${s.val}</div></div>`).join('');
   renderReportTable(d,h);
 }
 
@@ -10645,7 +10697,7 @@ function renderReportTable(d,h){
   document.getElementById('rep-results').innerHTML=`
     <div class="table-wrap" id="rep-print-area">
       <div style="padding:14px 18px;background:rgba(79,70,229,.06);border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
-        <span style="font-size:15px;color:#8899bb;letter-spacing:.1em;text-transform:uppercase;">${cfg.label} &nbsp;·&nbsp; ${_repData.length} registros &nbsp;·&nbsp; ${fmtDate(d)||'Inicio'} – ${fmtDate(h)||'Hoy'}</span>
+        <span style="font-size:15px;color:#8899bb;letter-spacing:.1em;text-transform:uppercase;">${esc(cfg.label)} &nbsp;·&nbsp; ${_repData.length} registros &nbsp;·&nbsp; ${fmtDate(d)||'Inicio'} – ${fmtDate(h)||'Hoy'}</span>
         <span style="font-family:var(--mono);font-size:16px;font-weight:500;color:#818cf8;">Total: ${fmt(colTotal)}</span>
       </div>
       <table>
@@ -10669,8 +10721,8 @@ function printReport(){
   const cfg=REP_CONFIGS[_repSection];
   const w=window.open('','_blank');
   const sum=document.getElementById('rep-summary').innerHTML;
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte ${cfg.label}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;color:#111;padding:32px;font-size:13px;}h1{font-size:20px;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;}p{font-size:11px;color:#666;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;}.cards{display:flex;gap:14px;margin-bottom:22px;flex-wrap:wrap;}.card{border:1px solid #ddd;border-radius:4px;padding:12px 16px;flex:1;min-width:120px;}.cl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;}.cv{font-size:17px;font-weight:600;}table{width:100%;border-collapse:collapse;}th{background:#111;color:#fff;padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;}td{padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;}tfoot td{font-weight:700;background:#f5f5f5;border-top:2px solid #333;}.ft{margin-top:22px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px;}</style>  <!-- Firebase SDK -->
-</head><body><h1>${cfg.label}</h1><p>ICG Financial PRO V2.0 &nbsp;·&nbsp; ICG Creatividad &nbsp;·&nbsp; ${new Date().toLocaleString('es-DO')}</p><div class="cards">${sum.replace(/<div class="bcard"[^>]*>/g,'<div class="card">').replace(/<div class="bcard-label">/g,'<div class="cl">').replace(/<div class="bcard-value"[^>]*>/g,'<div class="cv">').replace(/<style>[^<]*<\/style>/g,'')}</div>${area.outerHTML}<div class="ft">ICG Financial PRO V2.0 · Sistema Financiero Integral</div></body></html>`);
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte ${esc(cfg.label)}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;color:#111;padding:32px;font-size:13px;}h1{font-size:20px;font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;}p{font-size:11px;color:#666;letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;}.cards{display:flex;gap:14px;margin-bottom:22px;flex-wrap:wrap;}.card{border:1px solid #ddd;border-radius:4px;padding:12px 16px;flex:1;min-width:120px;}.cl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;}.cv{font-size:17px;font-weight:600;}table{width:100%;border-collapse:collapse;}th{background:#111;color:#fff;padding:9px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.08em;}td{padding:9px 12px;border-bottom:1px solid #eee;font-size:12px;}tfoot td{font-weight:700;background:#f5f5f5;border-top:2px solid #333;}.ft{margin-top:22px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:12px;}</style>  <!-- Firebase SDK -->
+</head><body><h1>${esc(cfg.label)}</h1><p>ICG Financial PRO V2.0 &nbsp;·&nbsp; ICG Creatividad &nbsp;·&nbsp; ${new Date().toLocaleString('es-DO')}</p><div class="cards">${sum.replace(/<div class="bcard"[^>]*>/g,'<div class="card">').replace(/<div class="bcard-label">/g,'<div class="cl">').replace(/<div class="bcard-value"[^>]*>/g,'<div class="cv">').replace(/<style>[^<]*<\/style>/g,'')}</div>${area.outerHTML}<div class="ft">ICG Financial PRO V2.0 · Sistema Financiero Integral</div></body></html>`);
   w.document.close();
   setTimeout(()=>{w.print();},600);
 }
@@ -10741,8 +10793,8 @@ function renderPlanCuentas(){
     const head=cuentaByCode(String(g));
     const hijos=PLAN_CUENTAS.filter(c=>c.parent===String(g));
     return `<div style="margin-bottom:14px;">
-      <div style="font-weight:700;color:#818cf8;letter-spacing:.05em;font-size:15px;margin-bottom:4px;">${head.code} - ${head.nombre}</div>
-      ${hijos.map(h=>`<div style="padding-left:18px;color:#c8d0e0;font-size:15px;line-height:1.9;">${h.code} - ${h.nombre}${h.tipo==='capital_contra'?' <span style="color:#ef4444;font-size:15px;">(cuenta contra-capital, no pasa por Estado de Resultados)</span>':''}</div>`).join('')}
+      <div style="font-weight:700;color:#818cf8;letter-spacing:.05em;font-size:15px;margin-bottom:4px;">${head.code} - ${esc(head.nombre)}</div>
+      ${hijos.map(h=>`<div style="padding-left:18px;color:#c8d0e0;font-size:15px;line-height:1.9;">${h.code} - ${esc(h.nombre)}${h.tipo==='capital_contra'?' <span style="color:#ef4444;font-size:15px;">(cuenta contra-capital, no pasa por Estado de Resultados)</span>':''}</div>`).join('')}
     </div>`;
   }).join('');
   document.getElementById('planCuentasTree').innerHTML=treeHtml;
@@ -10756,32 +10808,32 @@ function renderPlanCuentas(){
     const code=getCuentaCodigo('ingresos',c.key);
     if(ingLeaf.length<=1){
       const a=ingLeaf[0];
-      return `<tr><td>${c.label}</td><td><span style="display:inline-block;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:#8899bb;font-size:15px;padding:9px 13px;">${a?esc(a.code+' - '+a.nombre):'—'}</span></td></tr>`;
+      return `<tr><td>${esc(c.label)}</td><td><span style="display:inline-block;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:#8899bb;font-size:15px;padding:9px 13px;">${a?esc(a.code+' - '+a.nombre):'—'}</span></td></tr>`;
     }
-    const opts=ingLeaf.map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${a.nombre}</option>`).join('');
-    return `<tr><td>${c.label}</td><td><select onchange="setCuentaCodigo('ingresos','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">${opts}</select></td></tr>`;
+    const opts=ingLeaf.map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${esc(a.nombre)}</option>`).join('');
+    return `<tr><td>${esc(c.label)}</td><td><select onchange="setCuentaCodigo('ingresos','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">${opts}</select></td></tr>`;
   }).join('');
 
   // Mapeo de categorías de Egresos
   document.getElementById('mapEgresosBody').innerHTML=getAllEgrCats().map(c=>{
     const code=getCuentaCodigo('egresos',c.key);
     const fija=!!CUENTAS_FIJAS[c.key];
-    const opts=leafAccounts('gasto').map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${a.nombre}</option>`).join('');
-    return `<tr><td>${c.label}${fija?' <span style="color:#818cf8;font-size:15px;">(fija)</span>':''}</td><td><select ${fija?'disabled':''} onchange="setCuentaCodigo('egresos','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;${fija?'opacity:.4;cursor:not-allowed;':''}">${opts}</select></td></tr>`;
+    const opts=leafAccounts('gasto').map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${esc(a.nombre)}</option>`).join('');
+    return `<tr><td>${esc(c.label)}${fija?' <span style="color:#818cf8;font-size:15px;">(fija)</span>':''}</td><td><select ${fija?'disabled':''} onchange="setCuentaCodigo('egresos','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;${fija?'opacity:.4;cursor:not-allowed;':''}">${opts}</select></td></tr>`;
   }).join('');
 
   // Mapeo de categorías de Tarjeta
   const tarjetaCats=S.categoriasTarjeta||[];
   document.getElementById('mapTarjetaBody').innerHTML=tarjetaCats.length?tarjetaCats.map(c=>{
     const code=getCuentaCodigo('tarjeta',c.key);
-    const opts=leafAccounts('gasto').map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${a.nombre}</option>`).join('');
-    return `<tr><td>${c.label}</td><td><select onchange="setCuentaCodigo('tarjeta','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">${opts}</select></td></tr>`;
+    const opts=leafAccounts('gasto').map(a=>`<option value="${a.code}" ${a.code===code?'selected':''}>${a.code} - ${esc(a.nombre)}</option>`).join('');
+    return `<tr><td>${esc(c.label)}</td><td><select onchange="setCuentaCodigo('tarjeta','${c.key}',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">${opts}</select></td></tr>`;
   }).join(''):`<tr><td colspan="2"><div class="empty-state">Sin categorías de tarjeta creadas todavía.</div></td></tr>`;
 
   // Mapeo de Categorías de Egresos → Tipo de Costo (Directo vs Operativo)
   document.getElementById('mapCostoDirectoBody').innerHTML=getAllEgrCats().filter(c=>c.key!=='itbis'&&c.key!=='prestamos').map(c=>{
     const tipo=getTipoCosto(c.key);
-    return `<tr><td>${c.label}</td><td>
+    return `<tr><td>${esc(c.label)}</td><td>
       <select onchange="S.categoriasCostoDirecto['${c.key}']=this.value;save();" style="width:100%;background:var(--s2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:15px;padding:9px 13px;outline:none;">
         <option value="directo" ${tipo==='directo'?'selected':''}>💰 Costo Directo</option>
         <option value="operativo" ${tipo==='operativo'?'selected':''}>🏢 Gasto Operativo</option>
@@ -10797,7 +10849,7 @@ function renderPlanCuentas(){
 // para restarse de Utilidades Retenidas en el Balance General.
 function refreshDistribAccountSelect(){
   const sel=document.getElementById('dist-cuenta'); if(!sel)return;
-  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${a.name}</option>`).join('');
+  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('');
 }
 function confirmDistribucion(){
   const fecha=document.getElementById('dist-fecha').value;
@@ -10977,7 +11029,7 @@ function generarLibroMayor(){
   _mayorData=buildLibroMayor(desde,hasta);
   document.getElementById('mayor-content').innerHTML=_mayorData.length?_mayorData.map(c=>`
     <div class="add-form" style="margin-bottom:16px;">
-      <h3>${c.label} <span style="font-size:15px;color:#8899bb;font-weight:400;">(${c.deudora?'naturaleza deudora':'naturaleza acreedora'})</span></h3>
+      <h3>${esc(c.label)} <span style="font-size:15px;color:#8899bb;font-weight:400;">(${c.deudora?'naturaleza deudora':'naturaleza acreedora'})</span></h3>
       <div class="table-wrap"><table>
         <thead><tr><th>Fecha</th><th>Concepto</th><th>Referencia</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead>
         <tbody>${c.filas.map(f=>`<tr><td class="td-mono">${fmtDate(f.fecha)}</td><td style="max-width:220px;">${esc(f.concepto)}</td><td style="color:#8899bb;">${esc(f.ref)}</td><td class="td-mono positive">${f.debe?fmt(f.debe):'—'}</td><td class="td-mono negative">${f.haber?fmt(f.haber):'—'}</td><td class="td-mono" style="font-weight:600;color:#818cf8;">${fmt(f.saldo)}</td></tr>`).join('')}</tbody>
@@ -11001,9 +11053,9 @@ function exportReportCSV(){
 // Exporta un .xlsx REAL (no CSV) usando SheetJS, con las columnas de monto como números de
 // verdad (no texto) y una fila de TOTAL al final con una fórmula =SUMA() de Excel — así, al
 // abrirlo, Excel calcula el total él mismo y se puede comparar contra lo que muestra el sistema.
-function exportReportXLSX(){
+async function exportReportXLSX(){
   if(!_repData.length){notify('warning','Sin Datos','Genera un reporte primero.');return;}
-  if(typeof XLSX==='undefined'){notify('error','No Disponible','La librería de Excel no cargó — revisa tu conexión a internet e intenta de nuevo.');return;}
+  try{ await cargarLibreria('xlsx'); }catch(e){notify('error','No Disponible','La librería de Excel no cargó — revisa tu conexión a internet e intenta de nuevo.');return;}
   const cfg=REP_CONFIGS[_repSection];
   const unesc=c=>c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
   const cleanTxt=c=>unesc((c||'').replace(/<[^>]*>/g,'')).trim();
@@ -11118,6 +11170,7 @@ function initFirebase(attempt){
     firebase.auth().onAuthStateChanged(user=>{
       if(user && user.email && user.email.toLowerCase()===ALLOWED_EMAIL){
         hideLoginGate();
+        _sinCopiaLocal=false;
         document.getElementById('logoutBtn').style.display='inline-flex';
         if(!_authResolved){ _authResolved=true; playIntroThenLoad(); }
       } else if(user){
@@ -11150,6 +11203,7 @@ function initFirebase(attempt){
 const ALLOWED_EMAIL = 'icgcreatividadtaller@gmail.com';
 let _authResolved = false;
 function showLoginGate(){
+  limpiarCopiaLocal();
   const s=document.getElementById('splash'); if(s) s.style.display='none';
   document.getElementById('loginGate').style.display='flex';
   // Nunca dejar la contraseña (ni el correo) visibles al volver a esta pantalla —
@@ -11206,6 +11260,7 @@ function forgotPassword(){
 function logoutUser(){
   icgConfirm('¿Cerrar sesión? Tendrás que volver a ingresar tu correo y contraseña.','Cerrar Sesión','Salir').then(ok=>{
     if(!ok)return;
+    limpiarCopiaLocal();
     firebase.auth().signOut();
   });
 }
@@ -11496,7 +11551,8 @@ function applyFirebaseData(data){
   S = data;
   ensureEstadoIntegro();
   try{ migrarVinculosPorId(); bitacoraRebase(); }catch(e){}
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch(e){}
+  try { if(!_sinCopiaLocal) localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch(e){}
+  try{ vigilarTamano(); }catch(e){}
 }
 
 function reRenderAll(){
