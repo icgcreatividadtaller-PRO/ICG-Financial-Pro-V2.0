@@ -1711,6 +1711,32 @@ function cargarLibreria(nombre){
 </div>
 
 <!-- ══ EGRESOS ══ -->
+<div class="panel" id="panel-facturacion">
+  <div class="account-top">
+    <div class="account-name-area"><h2 style="color:#fdc901;">Facturación</h2><p>Lo que se factura (por fecha de factura), se haya cobrado o no · las facturas se crean en CxC</p></div>
+  </div>
+  <div class="account-top"><div class="balance-cards" id="fac-top"></div></div>
+  <div class="transactions-section">
+    <h3>Historial de Facturación</h3>
+    <div class="filter-bar">
+      <div class="form-group" style="flex:6 1 0;min-width:220px;"><label>🔍 Buscar</label>
+        <input autocomplete="off" type="text" id="fac-filter-search" oninput="debounceSearch(renderFacturacion)" placeholder="Cliente, N° de factura o categoría..." style="width:100%;box-sizing:border-box;">
+      </div>
+      <div class="form-group" style="flex:1 1 160px;"><label>Mes</label><input autocomplete="off" type="month" id="fac-filter-mes" oninput="renderFacturacion()" style="width:100%;box-sizing:border-box;"></div>
+      <div class="form-group" style="flex:1 1 200px;"><label>Categoría</label><select id="fac-filter-cat" autocomplete="off" onchange="renderFacturacion()" style="width:100%;box-sizing:border-box;"><option value="">Todas</option></select></div>
+      <div class="form-group" style="flex:1 1 150px;"><label>Tipo de venta</label><select id="fac-filter-tipo" autocomplete="off" onchange="renderFacturacion()" style="width:100%;box-sizing:border-box;"><option value="">Todos</option><option value="directa">🏪 Counter</option><option value="corporativa">🏢 Corporativa</option></select></div>
+      <div class="form-group" style="flex:1 1 150px;"><label>Estado</label><select id="fac-filter-estado" autocomplete="off" onchange="renderFacturacion()" style="width:100%;box-sizing:border-box;"><option value="">Todos</option><option value="pendientes">Pendientes de cobro</option><option value="cobradas">Cobradas</option></select></div>
+      <label style="align-self:flex-end;display:flex;align-items:center;gap:6px;font-size:15px;color:#9ca3af;height:44px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="fac-filter-itbis" onchange="renderFacturacion()"> Solo con ITBIS</label>
+      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="['fac-filter-search','fac-filter-mes','fac-filter-cat','fac-filter-tipo','fac-filter-estado'].forEach(i=>document.getElementById(i).value='');document.getElementById('fac-filter-itbis').checked=false;renderFacturacion()">Limpiar</button>
+    </div>
+    <div class="balance-cards" id="fac-resumen" style="margin-bottom:14px;"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Fecha</th><th>N° Factura</th><th>Cliente</th><th>Categoría</th><th>Tipo Venta</th><th>Subtotal</th><th>ITBIS (Ventas)</th><th>Total</th><th>Estado</th></tr></thead>
+      <tbody id="fac-tbody"></tbody>
+    </table></div>
+  </div>
+</div>
+
 <div class="panel" id="panel-egresos">
   <div class="account-top">
     <div class="account-name-area"><h2 style="color:#ef4444;">Egresos</h2><p>Gastos operativos · ICG Creatividad</p></div>
@@ -3270,6 +3296,7 @@ const NAV_BLOCKS={
   operaciones:{label:'Operaciones',locked:false,default:'ingresos',tabs:[
     {id:'tab-ing',cls:'',label:'Ingresos',t:'ingresos'},
     {id:'tab-egr',cls:'nav-indigo',label:'Egresos',t:'egresos'},
+    {id:'tab-fact',cls:'',label:'Facturación',t:'facturacion'},
     {id:'tab-cxc',cls:'nav-indigo',label:'CxC',t:'cxc'},
     {id:'tab-cxp',cls:'nav-indigo',label:'CxP',t:'cxp'},
     {id:'tab-cli',cls:'',label:'Clientes',t:'clientes'},
@@ -3568,7 +3595,7 @@ function _activateTabReal(idx){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   const map={cuentas:'tab-cuentas',cc:'tab-cc',cxc:'tab-cxc',cxp:'tab-cxp',
-             ingresos:'tab-ing',egresos:'tab-egr',clientes:'tab-cli',
+             ingresos:'tab-ing',egresos:'tab-egr',facturacion:'tab-fact',clientes:'tab-cli',
              suplidores:'tab-sup',rentabilidad:'tab-rent',reportes:'tab-rep',consolidated:'tab-con',
              comparativo:'tab-comp',
              contabilidad:'tab-contab',flujocaja:'tab-flujo',balancegeneral:'tab-balance',bitacora:'tab-bitacora'};
@@ -3590,6 +3617,7 @@ function _activateTabReal(idx){
     if(idx==='cxp') renderCXP();
     if(idx==='ingresos') switchIngresosView(_ingresosView);
     if(idx==='egresos') switchEgresosView(_egresosView);
+    if(idx==='facturacion') renderFacturacion();
     if(idx==='clientes') renderClientes();
     if(idx==='suplidores') renderSuplidores();
     if(idx==='rentabilidad') renderRentabilidad();
@@ -5837,7 +5865,7 @@ const FIN={
       const total=r2(parseFloat(x.amount)||0), itbis=r2(parseFloat(x.itbis)||0);
       if(total<=0) return;
       const sub=(parseFloat(x.subtotal)>0)?r2(parseFloat(x.subtotal)):r2(total-itbis);
-      filas.push({tipo:'factura',fecha:x.issued,ref:x.invoice||'',cliente:x.client||x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:sub,itbis,total});
+      filas.push({tipo:'factura',id:x.id,estado:(typeof cxcSt==='function'?cxcSt(x):''),fecha:x.issued,ref:x.invoice||'',cliente:x.client||x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:sub,itbis,total});
     });
     const finKeys=getAllIngFinCats().map(c=>c.key);
     (S.ingresos||[]).forEach(x=>{
@@ -5845,7 +5873,7 @@ const FIN={
       if(finKeys.includes(x.categoria) || !FIN._en(x.fecha,d,h)) return;
       const total=r2(x.monto||0), itbis=r2(x.itbis||0);
       if(total<=0) return;
-      filas.push({tipo:'directa',fecha:x.fecha,ref:'',cliente:x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:r2(total-itbis),itbis,total});
+      filas.push({tipo:'directa',id:x.id,estado:'directa',fecha:x.fecha,ref:'',cliente:x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:r2(total-itbis),itbis,total});
     });
     const f=filas.filter(r=>r.tipo==='factura'), v=filas.filter(r=>r.tipo==='directa');
     return {filas,neto:sumC(filas,r=>r.subtotal),itbis:sumC(filas,r=>r.itbis),total:sumC(filas,r=>r.total),
@@ -5873,15 +5901,20 @@ const FIN={
   // 'itbis' = toda la retención; 'ambas' = solo la parte de ITBIS (30% del ITBIS del abono). Las
   // retenciones 'manual'/'otro' no dicen de qué impuesto son: se reportan aparte (no se suman).
   itbisRetenido(d,h){
-    let itbis=0,sinClasificar=0,n=0;
+    let itbis=0,sinClasificar=0,n=0; const detalle=[];
     (S.cuentasCobrar||[]).forEach(x=>(x.pagos||[]).forEach(p=>{
       const ra=r2(p.retAmount||0);
       if(!(ra>0) || !FIN._en(p.date,d,h)) return;
-      if(p.retType==='itbis'){ itbis+=ra; n++; }
-      else if(p.retType==='ambas'){ itbis+=Math.min(ra,r2((p.montoBruto||0)*18/118*0.30)); n++; }
-      else if(p.retType==='manual'||p.retType==='otro'){ sinClasificar+=ra; }
+      let it=0;
+      if(p.retType==='itbis'){ it=ra; }
+      else if(p.retType==='ambas'){ it=Math.min(ra,r2((p.montoBruto||0)*18/118*0.30)); }
+      else if(p.retType==='manual'||p.retType==='otro'){ sinClasificar+=ra; detalle.push({fecha:p.date,factura:x.invoice||'',cliente:x.client||'',tipo:p.retType,retTotal:ra,itbis:0,montoBruto:p.montoBruto||0}); return; }
+      else return;
+      itbis+=it; n++;
+      detalle.push({fecha:p.date,factura:x.invoice||'',cliente:x.client||'',tipo:p.retType,retTotal:ra,itbis:it,montoBruto:p.montoBruto||0});
     }));
-    return {itbis:r2(itbis),sinClasificar:r2(sinClasificar),n};
+    detalle.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+    return {itbis:r2(itbis),sinClasificar:r2(sinClasificar),n,detalle};
   },
   // Resumen del período: ITBIS (Ventas) − ITBIS (Compras) − ITBIS retenido = a pagar a la DGII (+) o a favor (−).
   itbisPeriodo(d,h){
@@ -9345,6 +9378,43 @@ function confirmarComprobanteCliente(){
   }
 }
 let _ingresosView='manual';
+// ══════════════════ FACTURACIÓN (pestaña) ══════════════════
+// Solo lectura: lista y suma lo FACTURADO (fecha de factura), sin crear ni cambiar registros.
+function renderFacturacion(){
+  const todas=FIN.facturacion('','').filas;
+  const cm=new Date().toISOString().slice(0,7), cy=new Date().getFullYear().toString();
+  const delMes=todas.filter(x=>x.fecha.startsWith(cm)), delAnio=todas.filter(x=>x.fecha.startsWith(cy));
+  const card=(l,v,c)=>`<div class="bcard" style="flex:1;min-width:150px;"><div class="bcard-label">${l}</div><div class="bcard-value" style="color:${c};">${v}</div></div>`;
+  const topEl=document.getElementById('fac-top');
+  if(topEl) topEl.innerHTML=card('Facturado este mes',fmt(sumC(delMes,x=>x.total)),'#fdc901')+card('Facturado este año',fmt(sumC(delAnio,x=>x.total)),'#fdc901')+card('ITBIS (Ventas) este mes',fmt(sumC(delMes,x=>x.itbis)),'#9ca3af')+card('Total facturado',fmt(sumC(todas,x=>x.total)),'#fdc901');
+  const labels={...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))};
+  const sel=document.getElementById('fac-filter-cat');
+  if(sel){ const v=sel.value; sel.innerHTML='<option value="">Todas</option>'+getAllIngCats().map(c=>`<option value="${esc(c.key)}">${esc(c.label)}</option>`).join(''); if(v && sel.querySelector(`option[value="${v}"]`)) sel.value=v; }
+  const fM=document.getElementById('fac-filter-mes')?.value||'', fC=document.getElementById('fac-filter-cat')?.value||'';
+  const fT=document.getElementById('fac-filter-tipo')?.value||'', fE=document.getElementById('fac-filter-estado')?.value||'';
+  const fS=(document.getElementById('fac-filter-search')?.value||'').trim().toLowerCase();
+  let items=[...todas];
+  if(fM) items=items.filter(x=>x.fecha.startsWith(fM));
+  if(fC) items=items.filter(x=>x.categoria===fC);
+  if(fT) items=items.filter(x=>x.tipoVenta===fT);
+  if(fE==='pendientes') items=items.filter(x=>x.tipo==='factura' && x.estado!=='pagada');
+  if(fE==='cobradas') items=items.filter(x=>x.tipo==='directa' || x.estado==='pagada');
+  if(document.getElementById('fac-filter-itbis')?.checked) items=items.filter(x=>x.itbis>0);
+  if(fS) items=items.filter(x=>String(x.ref).toLowerCase().includes(fS) || String(x.cliente).toLowerCase().includes(fS) || String(labels[x.categoria]||x.categoria||'').toLowerCase().includes(fS));
+  const res=document.getElementById('fac-resumen');
+  if(res){
+    res.innerHTML=card('Documentos mostrados',items.length,'#b0bbcf')+card('Facturación (sin ITBIS)',fmt(sumC(items,x=>x.subtotal)),'#818cf8')+card('ITBIS (Ventas)',fmt(sumC(items,x=>x.itbis)),'#fdc901')+card('Total facturado',fmt(sumC(items,x=>x.total)),'#fdc901');
+  }
+  try{ wireAllPrivacyButtons(); }catch(e){}
+  items.sort((a,b)=>b.fecha.localeCompare(a.fecha)||String(b.ref).localeCompare(String(a.ref)));
+  const estadoTxt=x=>{
+    if(x.tipo==='directa') return '<span style="color:#818cf8;">Venta directa</span>';
+    const c=x.estado==='pagada'?'#818cf8':x.estado==='vencida'?'#ef4444':x.estado==='parcial'?'#4f46e5':'#b0bbcf';
+    return `<span style="color:${c};">${esc(String(x.estado||'').replace('_',' '))}</span>`;
+  };
+  document.getElementById('fac-tbody').innerHTML=items.length?items.map(x=>`<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${x.tipo==='factura'?esc(x.ref)||'—':'<span style="color:#9ca3af;">—</span>'}</td><td>${esc(x.cliente)||'—'}</td><td><span class="badge" style="background:rgba(253,201,1,.12);color:#fdc901;">${esc(labels[x.categoria]||x.categoria||'—')}</span></td><td>${tipoVentaBadge(x.tipoVenta)}</td><td class="td-mono">${fmt(x.subtotal)}</td><td class="td-mono" style="color:#fdc901;">${fmt(x.itbis)}</td><td class="td-mono" style="font-weight:600;">${fmt(x.total)}</td><td>${estadoTxt(x)}</td></tr>`).join(''):`<tr><td colspan="9"><div class="empty-state">Sin facturación que coincida con la búsqueda.</div></td></tr>`;
+}
+
 function switchIngresosView(view){
   _ingresosView=view;
   document.getElementById('ing-tab-manual').classList.toggle('active',view==='manual');
@@ -9869,8 +9939,9 @@ function renderRentabilidad(){
     let d=period==='mensual'?`${p.key}-01`:`${year}-${pad2(Math.min(...p.months))}-01`;
     const h=period==='mensual'?`${p.key}-31`:`${year}-${pad2(Math.max(...p.months))}-31`;
     if(desde && desde>d) d=desde;
-    return {label:p.label,...FIN.itbisPeriodo(d,h)};
+    return {label:p.label,d,h,...FIN.itbisPeriodo(d,h)};
   });
+  window._rentBlk={blk,desde:desde||`${year}-01-01`,hasta:`${year}-12-31`};
   const blkTot={
     neto:sumC(blk,b=>b.fact.neto),ventas:sumC(blk,b=>b.ventas),total:sumC(blk,b=>b.fact.total),compras:sumC(blk,b=>b.compras.itbis),
     ret:sumC(blk,b=>b.ret.itbis),dif:sumC(blk,b=>b.diferencia),sinClas:sumC(blk,b=>b.ret.sinClasificar),
@@ -9915,8 +9986,8 @@ function renderRentabilidad(){
   document.getElementById('rent-fact-title').textContent=desde?`Facturación e ITBIS ${year} · desde ${fmtDate(desde)}`:`Facturación e ITBIS ${year}`;
   document.getElementById('rent-fact-thead').innerHTML=`<tr><th>Período</th><th>Facturación (sin ITBIS)</th><th>ITBIS (Ventas)</th><th>Total facturado</th><th>ITBIS (Compras)</th><th>ITBIS retenido por clientes</th><th>ITBIS a pagar / a favor</th></tr>`;
   const celdaDif=(v,bold)=>{const w=(bold?'font-weight:700;':'')+'white-space:nowrap;';return Math.abs(v)<0.005?`<td class="td-mono" style="${w}color:#6b7a99;">—</td>`:(v>0?`<td class="td-mono negative" style="${w}">A pagar ${fmt(v)}</td>`:`<td class="td-mono positive" style="${w}">A favor ${fmt(-v)}</td>`);};
-  document.getElementById('rent-fact-tbody').innerHTML=blk.map(b=>`<tr><td style="font-weight:600;">${esc(b.label)}</td><td class="td-mono">${fmt(b.fact.neto)}</td><td class="td-mono" style="color:#fdc901;">${fmt(b.ventas)}</td><td class="td-mono">${fmt(b.fact.total)}</td><td class="td-mono">${fmt(b.compras.itbis)}</td><td class="td-mono">${fmt(b.ret.itbis)}</td>${celdaDif(b.diferencia)}</tr>`).join('')
-    +`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.neto)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(blkTot.ventas)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.total)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.compras)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.ret)}</td>${celdaDif(blkTot.dif,true)}</tr>`;
+  document.getElementById('rent-fact-tbody').innerHTML=blk.map(b=>`<tr><td style="font-weight:600;">${esc(b.label)}</td><td class="td-mono">${fmt(b.fact.neto)}</td><td class="td-mono" style="color:#fdc901;">${fmt(b.ventas)}</td><td class="td-mono">${fmt(b.fact.total)}</td><td class="td-mono">${fmt(b.compras.itbis)}</td><td class="td-mono" style="cursor:pointer;text-decoration:underline dotted;" title="Clic para ver qué cobros componen esta cifra" onclick="verDetalleRetenciones(${blk.indexOf(b)})">${fmt(b.ret.itbis)}</td>${celdaDif(b.diferencia)}</tr>`).join('')
+    +`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.neto)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(blkTot.ventas)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.total)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.compras)}</td><td class="td-mono" style="font-weight:700;cursor:pointer;text-decoration:underline dotted;" title="Clic para ver qué cobros componen esta cifra" onclick="verDetalleRetenciones(-1)">${fmt(blkTot.ret)}</td>${celdaDif(blkTot.dif,true)}</tr>`;
   const notas=['<strong>ITBIS a pagar / a favor</strong> = ITBIS (Ventas) − ITBIS (Compras) − ITBIS retenido por clientes. Se calcula por la fecha de cada factura (las retenciones, por la fecha del pago).',
     'ITBIS (Compras) suma solo el ITBIS que escribiste al registrar cada factura de compra o gasto; lo registrado sin ITBIS cuenta como cero. Confirma con tu contador qué compras dan derecho a crédito.'];
   if(blkTot.nDir>0) notas.push(`La facturación incluye ${blkTot.nDir} venta(s) directa(s) registradas sin factura por ${fmt(blkTot.totDir)}.`);
@@ -10655,6 +10726,14 @@ const REP_CONFIGS={
   }
 };
 
+// Detalle de las retenciones de ITBIS de un período (o de todo el año con -1): de dónde sale la cifra.
+function verDetalleRetenciones(i){
+  const R=window._rentBlk; if(!R) return;
+  const d=i<0?R.desde:R.blk[i].d, h=i<0?R.hasta:R.blk[i].h;
+  const r=FIN.itbisRetenido(d,h);
+  const filas=r.detalle.map(x=>`<tr><td>${fmtDate(x.fecha)}</td><td>${esc(x.factura)}</td><td>${esc(x.cliente)}</td><td>${esc(x.tipo)}</td><td style="text-align:right;">${fmt(x.retTotal)}</td><td style="text-align:right;font-weight:700;">${fmt(x.itbis)}</td></tr>`).join('');
+  icgAlert(r.detalle.length?`<div style="max-height:50vh;overflow:auto;"><table style="width:100%;font-size:14px;border-collapse:collapse;"><thead><tr><th style="text-align:left;">Fecha cobro</th><th style="text-align:left;">Factura</th><th style="text-align:left;">Cliente</th><th style="text-align:left;">Tipo</th><th>Retención</th><th>Parte ITBIS</th></tr></thead><tbody>${filas}</tbody></table></div><br>ITBIS retenido que se resta: <strong>${fmt(r.itbis)}</strong>`:'No hay retenciones registradas en este período.','ITBIS retenido por clientes');
+}
 // Reporte de Facturación: lo que se EMITE (por fecha de factura), se haya cobrado o no.
 REP_CONFIGS.facturacion={
   label:'Facturación',
