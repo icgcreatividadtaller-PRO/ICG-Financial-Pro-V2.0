@@ -1605,7 +1605,7 @@ function cargarLibreria(nombre){
     <h3>Historial de Ingresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:6 1 0;min-width:220px;"><label>🔍 Buscar</label>
-        <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="debounceSearch(renderIngresos)" placeholder="Cliente, categoría o descripción..." style="width:100%;box-sizing:border-box;">
+        <input autocomplete="off" type="text" id="ing-filter-search" list="ing-search-datalist" oninput="debounceSearch(renderIngresos)" placeholder="Cliente, categoría, descripción o referencia..." style="width:100%;box-sizing:border-box;">
         <datalist id="ing-search-datalist"></datalist>
       </div>
       <div class="form-group" style="flex:1 1 160px;"><label>Mes</label><input autocomplete="off" type="month" id="ing-filter-mes" oninput="renderIngresos()" style="width:100%;box-sizing:border-box;"></div>
@@ -1623,8 +1623,10 @@ function cargarLibreria(nombre){
           <option value="acrilicas">Placas Acrílicas</option>
         </select>
       </div>
-      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('ing-filter-search').value='';document.getElementById('ing-filter-mes').value='';document.getElementById('ing-filter-cat').value='';renderIngresos()">Limpiar Filtro</button>
+      <label style="align-self:flex-end;display:flex;align-items:center;gap:6px;font-size:15px;color:#9ca3af;height:44px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="ing-filter-itbis" onchange="renderIngresos()"> Solo con ITBIS</label>
+      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('ing-filter-search').value='';document.getElementById('ing-filter-mes').value='';document.getElementById('ing-filter-cat').value='';document.getElementById('ing-filter-itbis').checked=false;renderIngresos()">Limpiar Filtro</button>
     </div>
+    <div class="balance-cards" id="ing-resumen" style="margin-bottom:14px;"></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Fecha</th><th>Cliente</th><th>Categoría</th><th>Descripción</th><th>Tipo Venta</th><th>Método</th><th>Cuenta</th><th>Monto</th><th>ITBIS</th><th style="width:90px;">Fuente</th><th></th></tr></thead>
       <tbody id="ing-tbody"></tbody>
@@ -1847,7 +1849,7 @@ function cargarLibreria(nombre){
     <h3>Historial de Egresos</h3>
     <div class="filter-bar">
       <div class="form-group" style="flex:6 1 0;min-width:220px;"><label>🔍 Buscar</label>
-        <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="debounceSearch(renderEgresos)" placeholder="Suplidor, categoría o descripción..." style="width:100%;box-sizing:border-box;">
+        <input autocomplete="off" type="text" id="egr-filter-search" list="egr-search-datalist" oninput="debounceSearch(renderEgresos)" placeholder="Suplidor, categoría, descripción, factura o subcategoría..." style="width:100%;box-sizing:border-box;">
         <datalist id="egr-search-datalist"></datalist>
       </div>
       <div class="form-group" style="flex:1 1 160px;"><label>Mes</label><input autocomplete="off" type="month" id="egr-filter-mes" oninput="renderEgresos()" style="width:100%;box-sizing:border-box;"></div>
@@ -1869,8 +1871,10 @@ function cargarLibreria(nombre){
           <option value="transporte">Transportación</option>
         </select>
       </div>
-      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('egr-filter-search').value='';document.getElementById('egr-filter-mes').value='';document.getElementById('egr-filter-cat').value='';renderEgresos()">Limpiar Filtro</button>
+      <label style="align-self:flex-end;display:flex;align-items:center;gap:6px;font-size:15px;color:#9ca3af;height:44px;cursor:pointer;white-space:nowrap;"><input type="checkbox" id="egr-filter-itbis" onchange="renderEgresos()"> Solo con ITBIS</label>
+      <button class="btn btn-secondary btn-sm" style="align-self:flex-end;" onclick="document.getElementById('egr-filter-search').value='';document.getElementById('egr-filter-mes').value='';document.getElementById('egr-filter-cat').value='';document.getElementById('egr-filter-itbis').checked=false;renderEgresos()">Limpiar Filtro</button>
     </div>
+    <div class="balance-cards" id="egr-resumen" style="margin-bottom:14px;"></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Fecha</th><th>Beneficiario</th><th>Categoría</th><th>Descripción</th><th>Método</th><th>Cuenta</th><th>Monto</th><th>ITBIS</th><th style="width:90px;">Fuente</th><th></th></tr></thead>
       <tbody id="egr-tbody"></tbody>
@@ -2016,6 +2020,16 @@ function cargarLibreria(nombre){
     </table></div>
   </div>
 
+  <!-- Facturación e ITBIS (devengado: por fecha de factura) -->
+  <div class="transactions-section" style="margin-top:20px;">
+    <h3 id="rent-fact-title">Facturación e ITBIS</h3>
+    <div class="table-wrap"><table>
+      <thead id="rent-fact-thead"></thead>
+      <tbody id="rent-fact-tbody"></tbody>
+    </table></div>
+    <div id="rent-fact-nota" style="margin-top:8px;"></div>
+  </div>
+
   <!-- Tipo de Venta breakdown -->
   <div class="add-form" style="margin-top:20px;margin-bottom:0;">
     <h3>Ingresos por Tipo de Venta</h3>
@@ -2132,6 +2146,7 @@ function cargarLibreria(nombre){
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:28px;" id="rep-subtabs">
     <button class="acct-tab active" id="rep-tab-cxc"      onclick="switchRep('cxc')">Cuentas por Cobrar</button>
     <button class="acct-tab"        id="rep-tab-cxp"      onclick="switchRep('cxp')">Cuentas por Pagar</button>
+    <button class="acct-tab"        id="rep-tab-facturacion" onclick="switchRep('facturacion')">Facturación</button>
     <button class="acct-tab"        id="rep-tab-ingresos" onclick="switchRep('ingresos')">Ingresos</button>
     <button class="acct-tab"        id="rep-tab-egresos"  onclick="switchRep('egresos')">Egresos</button>
   </div>
@@ -2262,7 +2277,7 @@ function cargarLibreria(nombre){
     <div class="add-form" style="margin-bottom:18px;">
       <h3>ITBIS <span style="font-size:13px;color:#6b7a99;font-weight:400;">— declaración mensual</span></h3>
       <div class="balance-cards" style="margin-top:10px;">
-        <div class="bcard" style="border-color:rgba(253,201,1,.3);"><div class="bcard-label">ITBIS Cobrado (año)</div><div class="bcard-value" style="color:#fdc901;" id="imp-itbis-cobrado">RD$0.00</div></div>
+        <div class="bcard" style="border-color:rgba(253,201,1,.3);"><div class="bcard-label">ITBIS en Ingresos (año) <span title="ITBIS incluido en los ingresos registrados al cobrar; es la base del ITBIS por pagar del Balance">ⓘ</span></div><div class="bcard-value" style="color:#fdc901;" id="imp-itbis-cobrado">RD$0.00</div></div>
         <div class="bcard"><div class="bcard-label">Crédito Fiscal (año)</div><div class="bcard-value positive" id="imp-itbis-credito">RD$0.00</div></div>
         <div class="bcard"><div class="bcard-label">Remesas Pagadas (año)</div><div class="bcard-value" style="color:#818cf8;" id="imp-itbis-remesas">RD$0.00</div></div>
         <div class="bcard" style="border-color:rgba(239,68,68,.3);"><div class="bcard-label">ITBIS por Pagar (saldo actual)</div><div class="bcard-value negative" id="imp-itbis-porpagar">RD$0.00</div></div>
@@ -5808,6 +5823,70 @@ const FIN={
     const B=FIN.balance();
     const dif=r2(B.utilidadesRetenidas-utilidadPLEnBalance(utilPL));
     return {utilPL,utilBalance:B.utilidadesRetenidas,dif};
+  },
+  // ══ FACTURACIÓN E ITBIS (solo lectura: NO tocan el Balance ni ningún registro) ══
+  // Rango de fechas 'AAAA-MM-DD' (comparación de texto); d/h vacíos = sin límite.
+  _en(f,d,h){ f=f||''; return !!f && (!d||f>=d) && (!h||f<=h); },
+  // Facturación = lo que se EMITE (fecha de la factura), no lo que se cobra. Incluye las facturas de
+  // CxC (menos anuladas) y las ventas directas registradas a mano (sin factura). No incluye cobros de
+  // facturas, anticipos (recibos) ni ingresos financieros: se duplicarían o no son ventas.
+  facturacion(d,h){
+    const filas=[];
+    (S.cuentasCobrar||[]).forEach(x=>{
+      if(x.estado==='anulada' || !FIN._en(x.issued,d,h)) return;
+      const total=r2(parseFloat(x.amount)||0), itbis=r2(parseFloat(x.itbis)||0);
+      if(total<=0) return;
+      const sub=(parseFloat(x.subtotal)>0)?r2(parseFloat(x.subtotal)):r2(total-itbis);
+      filas.push({tipo:'factura',fecha:x.issued,ref:x.invoice||'',cliente:x.client||x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:sub,itbis,total});
+    });
+    const finKeys=getAllIngFinCats().map(c=>c.key);
+    (S.ingresos||[]).forEach(x=>{
+      if(x.fuente && x.fuente!=='manual') return;          // cobros de CxC, recibos (anticipos), etc.
+      if(finKeys.includes(x.categoria) || !FIN._en(x.fecha,d,h)) return;
+      const total=r2(x.monto||0), itbis=r2(x.itbis||0);
+      if(total<=0) return;
+      filas.push({tipo:'directa',fecha:x.fecha,ref:'',cliente:x.clienteNombre||'',categoria:x.categoria||'',tipoVenta:x.tipoVenta||'corporativa',subtotal:r2(total-itbis),itbis,total});
+    });
+    const f=filas.filter(r=>r.tipo==='factura'), v=filas.filter(r=>r.tipo==='directa');
+    return {filas,neto:sumC(filas,r=>r.subtotal),itbis:sumC(filas,r=>r.itbis),total:sumC(filas,r=>r.total),
+            nFacturas:f.length,nDirectas:v.length,totalDirectas:sumC(v,r=>r.total)};
+  },
+  // ITBIS (Compras): ITBIS de las facturas de compra, por la fecha de la factura. Facturas de proveedores
+  // (CxP) + gastos directos que no vienen de una CxP. Los pagos de una CxP ya llevan su parte del ITBIS
+  // (se contaría dos veces), salvo que su CxP de origen ya no exista. Las remesas a la DGII no cuentan.
+  itbisCompras(d,h){
+    const itemsCxp=['proveedores','serviciosFijos','prestamos','otros'].flatMap(k=>(S.cuentasPagar&&S.cuentasPagar[k])||[]);
+    let desdeCxp=0,nCxp=0,directo=0,nDir=0;
+    (S.cuentasPagar&&S.cuentasPagar.proveedores||[]).forEach(x=>{
+      const it=r2(parseFloat(x.itbis)||0);
+      if(it>0 && FIN._en(x.fecha,d,h)){ desdeCxp+=it; nCxp++; }
+    });
+    (S.egresos||[]).forEach(e=>{
+      const it=r2(e.itbis||0);
+      if(!(it>0) || e.categoria==='itbis' || !FIN._en(e.fecha,d,h)) return;
+      if(e.fuente==='cxp' && itemsCxp.some(i=>i.id===e.fuenteItemId || i.id===e.fuenteId || (i.pagos||[]).some(pg=>pg.id===e.fuenteId))) return;
+      directo+=it; nDir++;
+    });
+    return {itbis:r2(desdeCxp+directo),desdeCxp:r2(desdeCxp),directo:r2(directo),nCxp,nDirectos:nDir};
+  },
+  // ITBIS que los clientes retuvieron al pagar (por fecha del pago): reduce lo que se paga a la DGII.
+  // 'itbis' = toda la retención; 'ambas' = solo la parte de ITBIS (30% del ITBIS del abono). Las
+  // retenciones 'manual'/'otro' no dicen de qué impuesto son: se reportan aparte (no se suman).
+  itbisRetenido(d,h){
+    let itbis=0,sinClasificar=0,n=0;
+    (S.cuentasCobrar||[]).forEach(x=>(x.pagos||[]).forEach(p=>{
+      const ra=r2(p.retAmount||0);
+      if(!(ra>0) || !FIN._en(p.date,d,h)) return;
+      if(p.retType==='itbis'){ itbis+=ra; n++; }
+      else if(p.retType==='ambas'){ itbis+=Math.min(ra,r2((p.montoBruto||0)*18/118*0.30)); n++; }
+      else if(p.retType==='manual'||p.retType==='otro'){ sinClasificar+=ra; }
+    }));
+    return {itbis:r2(itbis),sinClasificar:r2(sinClasificar),n};
+  },
+  // Resumen del período: ITBIS (Ventas) − ITBIS (Compras) − ITBIS retenido = a pagar a la DGII (+) o a favor (−).
+  itbisPeriodo(d,h){
+    const fa=FIN.facturacion(d,h), co=FIN.itbisCompras(d,h), re=FIN.itbisRetenido(d,h);
+    return {fact:fa,compras:co,ret:re,ventas:fa.itbis,diferencia:r2(fa.itbis-co.itbis-re.itbis)};
   }
 };
 // Lo que separa la utilidad del Estado de Resultados de las Utilidades Retenidas del Balance:
@@ -9283,6 +9362,18 @@ function switchEgresosView(view){
   document.getElementById('egrView-recibos').style.display=view==='recibos'?'':'none';
   if(view==='recibos') renderRecibosEgreso(); else renderEgresos();
 }
+// Barra de resumen de los historiales: suma SOLO lo que coincide con la búsqueda y los filtros.
+function resumenHistorial(elId,items,{etiquetaItbis,colorMonto,excluirItbisCat}){
+  const el=document.getElementById(elId); if(!el) return;
+  const monto=sumC(items,x=>x.monto||0);
+  const itbis=sumC(items.filter(x=>!(excluirItbisCat&&x.categoria==='itbis')),x=>x.itbis||0);
+  const card=(l,v,c,tt)=>`<div class="bcard" style="flex:1;min-width:150px;"><div class="bcard-label">${l}${tt?` <span title="${tt}">ⓘ</span>`:''}</div><div class="bcard-value" style="color:${c};">${v}</div></div>`;
+  el.innerHTML=card('Registros mostrados',items.length,'#b0bbcf')
+    +card('Monto total',fmt(monto),colorMonto)
+    +card(etiquetaItbis,fmt(itbis),'#fdc901')
+    +card('Monto sin ITBIS',fmt(r2(monto-itbis)),'#9ca3af');
+  try{ wireAllPrivacyButtons(); }catch(e){}
+}
 function renderIngresos(){
   refreshIngresoSelects();
   const mSel=document.getElementById('ing-metodo');
@@ -9299,14 +9390,17 @@ function renderIngresos(){
   let items=[...S.ingresos];
   if(fM)items=items.filter(x=>x.fecha.startsWith(fM));
   if(fC)items=items.filter(x=>x.categoria===fC);
+  if(document.getElementById('ing-filter-itbis')?.checked)items=items.filter(x=>(x.itbis||0)>0);
   if(fS){
     items=items.filter(x=>{
       const catLbl=({...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))})[x.categoria]||x.categoria||'';
       return (x.clienteNombre||'').toLowerCase().includes(fS)
         || catLbl.toLowerCase().includes(fS)
-        || (x.desc||'').toLowerCase().includes(fS);
+        || (x.desc||'').toLowerCase().includes(fS)
+        || (x.ref||'').toLowerCase().includes(fS);
     });
   }
+  resumenHistorial('ing-resumen',items,{etiquetaItbis:'ITBIS (Ventas) de estos registros',colorMonto:'#818cf8'});
   items.sort((a,b)=>b.fecha.localeCompare(a.fecha));
   document.getElementById('ing-tbody').innerHTML=items.length?items.map(x=>{
     const acct=x.esHistorico?'📋 Histórico':(S.accounts[x.cuentaIdx]?.name||'—');
@@ -9711,14 +9805,19 @@ function renderEgresos(){
   let items=[...S.egresos];
   if(fM)items=items.filter(x=>x.fecha.startsWith(fM));
   if(fC)items=items.filter(x=>x.categoria===fC);
+  if(document.getElementById('egr-filter-itbis')?.checked)items=items.filter(x=>(x.itbis||0)>0 && x.categoria!=='itbis');
   if(fS){
     items=items.filter(x=>{
       const catLbl=({...EGR_CAT_LABELS,cxp:'Pago CxP',...Object.fromEntries((S.categoriasEgresos||[]).map(c=>[c.key,c.label]))})[x.categoria]||x.categoria||'';
       return (x.suplidorNombre||'').toLowerCase().includes(fS)
         || catLbl.toLowerCase().includes(fS)
-        || (x.desc||'').toLowerCase().includes(fS);
+        || (x.desc||'').toLowerCase().includes(fS)
+        || (x.numFactura||'').toLowerCase().includes(fS)
+        || (x.subcategoria||'').toLowerCase().includes(fS)
+        || (x.ref||'').toLowerCase().includes(fS);
     });
   }
+  resumenHistorial('egr-resumen',items,{etiquetaItbis:'ITBIS (Compras) de estos registros',colorMonto:'#ef4444',excluirItbisCat:true});
   items.sort((a,b)=>b.fecha.localeCompare(a.fecha));
   document.getElementById('egr-tbody').innerHTML=items.length?items.map(x=>{
     const acct=x.esHistorico?'📋 Histórico':(S.accounts[x.cuentaIdx]?.name||'—');
@@ -9764,10 +9863,23 @@ function renderRentabilidad(){
   const data=periods.map(p=>{const bruto=gI(p),itbisP=gITBIS(p),neto=bruto-itbisP,egr=gE(p),costoDirecto=gPorTipo(p,'directo'),gastoOperativo=gPorTipo(p,'operativo'),gastoFinanciero=gFinanciero(p),utilBruta=neto-costoDirecto;return{...p,ing:neto,itbis:itbisP,bruto,egr,costoDirecto,gastoOperativo,gastoFinanciero,utilBruta,margenBruto:neto>0?(utilBruta/neto*100):0,util:neto-egr,margen:neto>0?((neto-egr)/neto*100):0};});
   const totIng=data.reduce((s,p)=>s+p.ing,0),totItbis=data.reduce((s,p)=>s+p.itbis,0),totBruto=data.reduce((s,p)=>s+p.bruto,0),totEgr=data.reduce((s,p)=>s+p.egr,0),totUtil=totIng-totEgr,totMarg=totIng>0?(totUtil/totIng*100):0;
   const totCostoDirecto=data.reduce((s,p)=>s+p.costoDirecto,0),totGastoOperativo=data.reduce((s,p)=>s+p.gastoOperativo,0),totGastoFinanciero=data.reduce((s,p)=>s+p.gastoFinanciero,0),totUtilOperativa=totIng-totCostoDirecto-totGastoOperativo,totUtilBruta=totIng-totCostoDirecto,totMargBruto=totIng>0?(totUtilBruta/totIng*100):0;
+  // Facturación e ITBIS por período (fecha de EMISIÓN de la factura, no del cobro). Solo lectura.
+  const pad2=n=>String(n).padStart(2,'0');
+  const blk=periods.map(p=>{
+    let d=period==='mensual'?`${p.key}-01`:`${year}-${pad2(Math.min(...p.months))}-01`;
+    const h=period==='mensual'?`${p.key}-31`:`${year}-${pad2(Math.max(...p.months))}-31`;
+    if(desde && desde>d) d=desde;
+    return {label:p.label,...FIN.itbisPeriodo(d,h)};
+  });
+  const blkTot={
+    neto:sumC(blk,b=>b.fact.neto),ventas:sumC(blk,b=>b.ventas),total:sumC(blk,b=>b.fact.total),compras:sumC(blk,b=>b.compras.itbis),
+    ret:sumC(blk,b=>b.ret.itbis),dif:sumC(blk,b=>b.diferencia),sinClas:sumC(blk,b=>b.ret.sinClasificar),
+    nDir:blk.reduce((s,b)=>s+b.fact.nDirectas,0),totDir:sumC(blk,b=>b.fact.totalDirectas)
+  };
   document.getElementById('rent-kpis').innerHTML=`
     <div class="bcard" style="border-color:rgba(129,140,248,.3);flex:1;min-width:130px;"><div class="bcard-label">Ingresos Netos ${desde?'desde '+fmtDate(desde):year} <span title="Sin ITBIS — antes de impuestos">ⓘ</span></div><div class="bcard-value positive">${fmt(totIng)}</div></div>
-    <div class="bcard" style="border-color:rgba(250,255,1,.3);flex:1;min-width:130px;"><div class="bcard-label">ITBIS Cobrado ${desde?'desde '+fmtDate(desde):year}</div><div class="bcard-value" style="color:#fdc901;">${fmt(totItbis)}</div></div>
-    <div class="bcard" style="border-color:rgba(129,140,248,.15);flex:1;min-width:130px;"><div class="bcard-label">Total Facturado (con ITBIS)</div><div class="bcard-value" style="color:#9ca3af;">${fmt(totBruto)}</div></div>
+    <div class="bcard" style="border-color:rgba(250,255,1,.3);flex:1;min-width:130px;"><div class="bcard-label">Facturación (sin ITBIS) ${desde?'desde '+fmtDate(desde):year} <span title="Lo que se factura (fecha de la factura), se haya cobrado o no">ⓘ</span></div><div class="bcard-value" style="color:#fdc901;">${fmt(blkTot.neto)}</div></div>
+    <div class="bcard" style="border-color:rgba(129,140,248,.15);flex:1;min-width:130px;"><div class="bcard-label">ITBIS (Ventas) ${desde?'desde '+fmtDate(desde):year}</div><div class="bcard-value" style="color:#9ca3af;">${fmt(blkTot.ventas)}</div></div>
     <div class="bcard" style="border-color:rgba(34,211,211,.3);flex:1;min-width:130px;"><div class="bcard-label">Costo Directo (Materiales, etc.) <span title="Lo que cuesta producir el trabajo en sí — materiales, subcontratación, impresión. Ajustable en Contabilidad.">ⓘ</span></div><div class="bcard-value" style="color:#22d3d3;">${fmt(totCostoDirecto)}</div></div>
     <div class="bcard" style="border-color:${totUtilBruta>=0?'rgba(74,222,128,.3)':'rgba(239,68,68,.3)'};flex:1;min-width:130px;"><div class="bcard-label">Utilidad Bruta <span title="Ingresos Netos − Costo Directo. Mide qué tan eficiente es tu producción, sin contar gastos fijos del taller.">ⓘ</span></div><div class="bcard-value ${totUtilBruta>=0?'positive':'negative'}">${fmt(totUtilBruta)}</div></div>
     <div class="rent-kpi-break"></div>
@@ -9797,8 +9909,19 @@ function renderRentabilidad(){
   document.getElementById('rent-table-title').textContent=desde
     ?`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year} · desde ${fmtDate(desde)}`
     :`Estado de Resultados ${period==='mensual'?'Mensual':'Trimestral'} ${year}`;
-  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>ITBIS Cobrado</th><th>Egresos (sin ITBIS)</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
-  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${esc(p.label)}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono" style="color:#fdc901;">${fmt(p.itbis)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(totItbis)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
+  document.getElementById('rent-thead').innerHTML=`<tr><th>Período</th><th>Ingresos (sin ITBIS)</th><th>Egresos (sin ITBIS)</th><th>Utilidad / Pérdida</th><th>Margen %</th></tr>`;
+  document.getElementById('rent-tbody').innerHTML=data.map((p,i)=>{return`<tr><td style="font-weight:600;">${esc(p.label)}</td><td class="td-mono positive">${fmt(p.ing)}</td><td class="td-mono negative">${fmt(p.egr)}</td><td class="td-mono ${p.util>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(p.util)}</td><td class="td-mono" style="color:${p.margen>=0?'#818cf8':'#ef4444'}">${p.margen.toFixed(1)}%</td></tr>`;}).join('')+`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono positive" style="font-weight:700;">${fmt(totIng)}</td><td class="td-mono negative" style="font-weight:700;">${fmt(totEgr)}</td><td class="td-mono ${totUtil>=0?'neutral':'negative'}" style="font-weight:700;">${fmt(totUtil)}</td><td class="td-mono" style="color:${totMarg>=0?'#818cf8':'#ef4444'};font-weight:700;">${totMarg.toFixed(1)}%</td></tr>`;
+  // ── Bloque Facturación e ITBIS (debajo del Estado de Resultados) ──
+  document.getElementById('rent-fact-title').textContent=desde?`Facturación e ITBIS ${year} · desde ${fmtDate(desde)}`:`Facturación e ITBIS ${year}`;
+  document.getElementById('rent-fact-thead').innerHTML=`<tr><th>Período</th><th>Facturación (sin ITBIS)</th><th>ITBIS (Ventas)</th><th>Total facturado</th><th>ITBIS (Compras)</th><th>ITBIS retenido por clientes</th><th>ITBIS a pagar / a favor</th></tr>`;
+  const celdaDif=(v,bold)=>{const w=(bold?'font-weight:700;':'')+'white-space:nowrap;';return Math.abs(v)<0.005?`<td class="td-mono" style="${w}color:#6b7a99;">—</td>`:(v>0?`<td class="td-mono negative" style="${w}">A pagar ${fmt(v)}</td>`:`<td class="td-mono positive" style="${w}">A favor ${fmt(-v)}</td>`);};
+  document.getElementById('rent-fact-tbody').innerHTML=blk.map(b=>`<tr><td style="font-weight:600;">${esc(b.label)}</td><td class="td-mono">${fmt(b.fact.neto)}</td><td class="td-mono" style="color:#fdc901;">${fmt(b.ventas)}</td><td class="td-mono">${fmt(b.fact.total)}</td><td class="td-mono">${fmt(b.compras.itbis)}</td><td class="td-mono">${fmt(b.ret.itbis)}</td>${celdaDif(b.diferencia)}</tr>`).join('')
+    +`<tr style="border-top:2px solid var(--border2);"><td style="font-weight:700;color:#818cf8;">TOTAL ${year}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.neto)}</td><td class="td-mono" style="color:#fdc901;font-weight:700;">${fmt(blkTot.ventas)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.total)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.compras)}</td><td class="td-mono" style="font-weight:700;">${fmt(blkTot.ret)}</td>${celdaDif(blkTot.dif,true)}</tr>`;
+  const notas=['<strong>ITBIS a pagar / a favor</strong> = ITBIS (Ventas) − ITBIS (Compras) − ITBIS retenido por clientes. Se calcula por la fecha de cada factura (las retenciones, por la fecha del pago).',
+    'ITBIS (Compras) suma solo el ITBIS que escribiste al registrar cada factura de compra o gasto; lo registrado sin ITBIS cuenta como cero. Confirma con tu contador qué compras dan derecho a crédito.'];
+  if(blkTot.nDir>0) notas.push(`La facturación incluye ${blkTot.nDir} venta(s) directa(s) registradas sin factura por ${fmt(blkTot.totDir)}.`);
+  if(blkTot.sinClas>0.005) notas.push(`<span style="color:#fdc901;">Hay retenciones por ${fmt(blkTot.sinClas)} marcadas como "manual" u "otro": no se sabe si son de ITBIS, por eso no se restan aquí.</span>`);
+  document.getElementById('rent-fact-nota').innerHTML=notas.map(n=>`<p style="font-size:14px;color:#8899bb;margin:6px 0 0;line-height:1.5;">${n}</p>`).join('');
   // Category bars
   const catBar=(items,labels,col,tipo,year)=>{const bc={};items.forEach(x=>{bc[x.categoria]=(bc[x.categoria]||0)+(tipo==='egreso'?montoGastoPL(x):x.monto);});const tot=Object.values(bc).reduce((s,v)=>s+v,0)||1;return Object.entries(bc).filter(([k,v])=>tipo!=='egreso'||v>0.004).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="margin-bottom:9px;cursor:pointer;" onclick="verDetalleCategoria('${tipo}','${k}',${year})" title="Ver el detalle de esta categoría"><div style="display:flex;justify-content:space-between;font-size:16px;margin-bottom:2px;"><span style="color:#c0c6d8;">${labels[k]||k}</span><span style="font-family:var(--mono);color:${col};font-weight:600;">${fmt(v)}</span></div><div style="background:var(--s3);border-radius:3px;height:5px;"><div style="background:${col};height:100%;border-radius:3px;width:${(v/tot*100).toFixed(1)}%;opacity:.8;"></div></div></div>`).join('')||`<p style="color:#6b7280;font-size:18px;text-align:center;padding:16px;">Sin datos</p>`;};
   const ingY=S.ingresos.filter(x=>x.fecha.startsWith(year.toString())&&pasaDesde(x.fecha));
@@ -10532,6 +10655,25 @@ const REP_CONFIGS={
   }
 };
 
+// Reporte de Facturación: lo que se EMITE (por fecha de factura), se haya cobrado o no.
+REP_CONFIGS.facturacion={
+  label:'Facturación',
+  dynFilter:REP_CONFIGS.ingresos.dynFilter,
+  headers:['Fecha','N° Factura','Cliente','Categoría','Tipo Venta','Subtotal RD$','ITBIS RD$','Total RD$'],
+  generate(d,h,f1,f2,f3){
+    let filas=FIN.facturacion(d,h).filas;
+    if(f1) filas=filas.filter(x=>x.cliente===f1);
+    if(f2) filas=filas.filter(x=>x.categoria===f2);
+    if(f3) filas=filas.filter(x=>x.tipoVenta===f3);
+    filas.sort((a,b)=>b.fecha.localeCompare(a.fecha)||String(b.ref).localeCompare(String(a.ref)));
+    const labels={...ING_CAT_LABELS,cxc:'Cobro CxC',...Object.fromEntries((S.categoriasIngresos||[]).map(c=>[c.key,c.label]))};
+    return filas.map(x=>({cells:[fmtDate(x.fecha),x.tipo==='factura'?esc(x.ref)||'—':'<span style="color:#9ca3af;">Venta directa</span>',esc(x.cliente)||'—',esc(labels[x.categoria]||x.categoria||'—'),tipoVentaBadge(x.tipoVenta),fmt(x.subtotal),fmt(x.itbis),fmt(x.total)],
+      totals:{total:x.total,subtotal:x.subtotal,itbis:x.itbis}}));
+  },
+  summary(rows){const sub=sumC(rows,r=>r.totals.subtotal),it=sumC(rows,r=>r.totals.itbis),tot=sumC(rows,r=>r.totals.total);
+    return[{label:'Facturación (sin ITBIS)',val:fmt(sub),color:'#818cf8'},{label:'ITBIS (Ventas)',val:fmt(it),color:'#fdc901'},{label:'Total Facturado',val:fmt(tot),color:'#818cf8'},{label:'Documentos',val:rows.length,color:'#b0bbcf'}];}
+};
+
 function switchRep(section){
   _repSection=section;
   document.querySelectorAll('#rep-subtabs .acct-tab').forEach(b=>b.classList.remove('active'));
@@ -10551,7 +10693,7 @@ function buildRepFilter(section){
   }
   const f1=document.getElementById('rep-f1');
   if(!f1)return;
-  if(section==='cxc'||section==='ingresos'){
+  if(section==='cxc'||section==='ingresos'||section==='facturacion'){
     const clients=[...new Set([...S.clientes.map(c=>c.nombre),...S.cuentasCobrar.map(x=>x.client||x.clienteNombre||'').filter(Boolean)])].sort();
     f1.innerHTML='<option value="">Todos</option>'+clients.map(c=>`<option value="${c}">${c}</option>`).join('');
   }
@@ -10563,7 +10705,7 @@ function buildRepFilter(section){
   // con las categorías reales del sistema (incluyendo las personalizadas que el usuario haya
   // creado con el botón "+"), para que nunca quede desactualizado ni con claves que no existen.
   const f2=document.getElementById('rep-f2');
-  if(f2 && (section==='egresos'||section==='ingresos')){
+  if(f2 && (section==='egresos'||section==='ingresos'||section==='facturacion')){
     const cats = section==='egresos' ? getAllEgrCats() : getAllIngCats();
     const valorActual = f2.value;
     f2.innerHTML = '<option value="">Todas</option>' + cats.map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
@@ -10609,7 +10751,8 @@ function sortReportBy(colIndex){
     let va,vb;
     if(esMonetaria){
       // Usa el total numérico real de la fila, no el texto formateado en la celda
-      va=a.totals?.total??0; vb=b.totals?.total??0;
+      const kk=({'Subtotal RD$':'subtotal','ITBIS RD$':'itbis'})[header]||'total';
+      va=a.totals?.[kk]??0; vb=b.totals?.[kk]??0;
     } else {
       va=stripHtml(a.cells[colIndex]); vb=stripHtml(b.cells[colIndex]);
     }
@@ -11060,7 +11203,7 @@ async function exportReportXLSX(){
   const unesc=c=>c.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
   const cleanTxt=c=>unesc((c||'').replace(/<[^>]*>/g,'')).trim();
   // Mapea qué encabezados representan montos en RD$ (columna → clave dentro de r.totals)
-  const numericColMap={'Total RD$':'total','Monto RD$':'total','Cobrado':'cobrado','Pendiente':'pendiente','Total':'total','Abonado':'abonado'};
+  const numericColMap={'Subtotal RD$':'subtotal','ITBIS RD$':'itbis','Total RD$':'total','Monto RD$':'total','Cobrado':'cobrado','Pendiente':'pendiente','Total':'total','Abonado':'abonado'};
 
   const aoa=[cfg.headers];
   _repData.forEach(r=>{
