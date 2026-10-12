@@ -3196,6 +3196,14 @@ function today(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function fmtDate(d){if(!d)return'';const[y,m,day]=d.split('-');return`${day}/${m}/${y}`;}
+// Método de una CxP: solo existe cuando hay un pago. Una factura pendiente no muestra ninguno (—).
+function cxpMetodoPagado(x){
+  const ps=x.pagos||[];
+  if(ps.length) return ps[ps.length-1].method||x.payMethod||x.metodo||null;
+  if(x.estado==='pagada') return x.payMethod||x.metodo||null;
+  return null;
+}
+function cxpMetodoCelda(x){ const m=cxpMetodoPagado(x); return m?methodBadge(m):'<span style="color:#6b7a99;">—</span>'; }
 function methodBadge(m){
   if(m==='transferencia') return `<span class="badge badge-transfer">Transf.</span>`;
   if(m==='cheque')        return `<span class="badge badge-check">Cheque</span>`;
@@ -5643,10 +5651,10 @@ function renderCXP(){
   };
 
   const rowMap = {
-    proveedores:    x=>[esc(x.nombre), esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), methodBadge(x.metodo), acctName(x), stBtn(x)],
-    serviciosFijos: x=>[esc(x.nombre), esc(x.cuenta)||'—', esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), fmtDate(x.vence), methodBadge(x.metodo), acctName(x), stBtn(x)],
+    proveedores:    x=>[esc(x.nombre), esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), cxpMetodoCelda(x), acctName(x), stBtn(x)],
+    serviciosFijos: x=>[esc(x.nombre), esc(x.cuenta)||'—', esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), fmtDate(x.vence), cxpMetodoCelda(x), acctName(x), stBtn(x)],
     prestamos:      x=>[esc(x.nombre), esc(x.concepto)||'—', '<span class="badge" style="background:rgba(129,140,248,.12);color:#818cf8;">Préstamos</span>', fmt(x.monto), fmt(x.saldo||0), fmtDate(x.vence), x.tasa?(x.tasa+'%'):'—', acctName(x), stBtn(x)],
-    otros:          x=>[esc(x.nombre), esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), methodBadge(x.metodo), acctName(x), stBtn(x)],
+    otros:          x=>[esc(x.nombre), esc(x.concepto)||'—', catLabel(x), fmt(x.monto), fmtDate(x.fecha), cxpMetodoCelda(x), acctName(x), stBtn(x)],
   };
   const hMap = {
     proveedores:    ['Proveedor','Concepto','Categoría','Monto','Fecha','Método','Cuenta','Estado',''],
