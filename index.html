@@ -6441,9 +6441,13 @@ function renderBalanceGeneral(){
   let msgDiferencia = '';
   let esTemporal = false; // true = causa conocida y esperable (ámbar) — false = de verdad no cuadra (rojo)
   if(!cuadra){
-    if(Math.abs(diferencia + cxpTotal) < 1){
+    // Los préstamos ya tienen su propia contrapartida (capital de apertura o el dinero recibido), así que
+    // la diferencia por una factura sin pagar se compara también contra la CxP SIN contar préstamos.
+    const _cxs=FIN.cxpPorSeccion(), cxpSinPrestamos=r2((_cxs.proveedores||0)+(_cxs.serviciosFijos||0)+(_cxs.otros||0));
+    const cxpCoincide = Math.abs(diferencia + cxpTotal) < 1 ? cxpTotal : (cxpSinPrestamos>0 && Math.abs(diferencia + cxpSinPrestamos) < 1 ? cxpSinPrestamos : null);
+    if(cxpCoincide!==null){
       esTemporal = true;
-      msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpTotal)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
+      msgDiferencia = `esto coincide con tu <strong>CxP pendiente de pago</strong> (${fmt(cxpCoincide)}) — es normal y temporal: sube el Pasivo antes de que el gasto/pago se refleje en el resto del balance. Se corrige solo en cuanto pagues esas cuentas.`;
     } else {
       // No coincidió con ninguna causa conocida y esperable — se arma la lista SOLO con lo que
       // de verdad existe en tus datos, en vez de una lista genérica fija.
