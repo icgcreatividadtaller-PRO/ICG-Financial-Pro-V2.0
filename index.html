@@ -5161,6 +5161,7 @@ const CXP_CONFIG = {
       {id:'metodo',    label:'Forma de Pago',           type:'select',span:1, options:['Transferencia','Efectivo','Cheque','Tarjeta de Crédito']},
       {id:'referencia',label:'RNC / Referencia',        type:'text',  span:2, placeholder:'RNC del proveedor o referencia...'},
       {id:'categoriaEgreso',label:'Categoría de Egreso',type:'egr-cat-select',span:2},
+      {id:'subcategoria',label:'Proceso',type:'subcat-select',span:2},
     ],
     headers: ['Proveedor','Concepto','Categoría','Monto','Fecha','Método','Cuenta','Estado',''],
   },
@@ -5240,6 +5241,10 @@ function buildCXPForm(section){
   grid.innerHTML = cfg.fields.map(f=>{
     const spanStyle = f.span===2 ? 'grid-column:span 2;' : '';
     let input = '';
+    if(f.type==='subcat-select'){
+      // Proceso (Impresión Offset) / Tipo de Material (Materiales): solo aparece si la categoría elegida lo tiene.
+      return `<div class="form-group" id="cxp-subcat-wrap" style="${spanStyle}display:none;"><label id="cxp-subcat-label">Proceso</label><div style="display:flex;gap:6px;"><select id="cxp-f-subcategoria" style="flex:1;min-width:0;"></select><button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarSubcatMateriales(document.getElementById('cxp-f-categoriaEgreso').value)" style="border-color:rgba(129,140,248,.3);color:#818cf8;padding:10px 12px;flex-shrink:0;" title="Gestionar">✎</button></div></div>`;
+    }
     if(f.type==='suplidor-select'){
       const opts=[...S.suplidores].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`).join('');
       input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;"><option value="">— Seleccionar —</option>${opts}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openSuplidorModal()" style="border-color:rgba(129,140,248,.3);color:#818cf8;padding:10px 12px;flex-shrink:0;white-space:nowrap;">+ Nuevo</button></div>`;
@@ -5249,7 +5254,7 @@ function buildCXPForm(section){
       // "Nómina Administrativa" → "nómina_administrativa") que ni siquiera coincidían con las
       // claves reales usadas en el resto del sistema. Ahora usa las claves reales directamente,
       // y el botón ✎ abre el mismo gestor de categorías que ya existe en Egresos.
-      input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;"><option value="">— Selecciona —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="border-color:rgba(239,68,68,.3);color:#ef4444;padding:10px 12px;flex-shrink:0;" title="Gestionar categorías">✎</button></div>`;
+      input=`<div style="display:flex;gap:6px;"><select id="cxp-f-${f.id}" style="flex:1;min-width:0;" onchange="onCxpCategoriaChange()"><option value="">— Selecciona —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select><button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarCategorias('egr')" style="border-color:rgba(239,68,68,.3);color:#ef4444;padding:10px 12px;flex-shrink:0;" title="Gestionar categorías">✎</button></div>`;
     } else if(f.type==='select'){
       const opts = f.id==='categoriaEgreso' ? [...f.options].sort((a,b)=>a.localeCompare(b,'es')) : f.options;
       const blank = f.id==='categoriaEgreso' ? '<option value="">— Selecciona —</option>' : '';
@@ -5311,6 +5316,7 @@ function addCXP(){
     if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) fieldsData[f.id] = numVal(el)||0;
     else fieldsData[f.id] = f.type==='number' ? (parseFloat(el?.value)||0) : (el?.value||'');
   });
+  if('subcategoria' in fieldsData && !subcatCfg(fieldsData.categoriaEgreso)) fieldsData.subcategoria='';
   if(!fieldsData.nombre || !fieldsData.monto){ notify('error','Campos Requeridos','Completa al menos Nombre y Monto.'); return; }
   if(cfg.fields.some(f=>f.id==='categoriaEgreso') && !fieldsData.categoriaEgreso){
     notify('error','Falta la Categoría','Selecciona una Categoría de Egreso específica — no se permite dejarla en blanco.',()=>{
@@ -5359,6 +5365,7 @@ function editCXPItem(section,id){
     if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) setMontoValue(el, item[f.id]||0);
     else el.value = item[f.id] ?? '';
   });
+  if(section==='proveedores') onCxpCategoriaChange(item.subcategoria||'');
   document.getElementById('cxpFormTitle').textContent = `Editando: ${item.nombre}`;
   renderCxpFormActions();
   document.getElementById('cxpAddForm').scrollIntoView({behavior:'smooth',block:'start'});
@@ -5632,7 +5639,7 @@ function renderCXP(){
     if(!x.categoriaEgreso) return '<span style="color:#6b7a99;">—</span>';
     const key = resolverCategoriaEgresoDeCxP(x.categoriaEgreso);
     const label = EGR_CAT_LABELS[key] || (S.categoriasEgresos||[]).find(c=>c.key===key)?.label || x.categoriaEgreso;
-    return `<span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(label)}</span>`;
+    return `<span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${esc(label)}${x.subcategoria?' — '+esc(x.subcategoria):''}</span>`;
   };
 
   const rowMap = {
@@ -7550,6 +7557,23 @@ function onEgrCategoriaChange(){
   }
   if(cfg) poblarSubcategoriaMateriales('egr-subcategoria',undefined,cat);
 }
+// Muestra/oculta y llena el campo Proceso / Tipo de Material del formulario de CxP (Proveedores).
+function onCxpCategoriaChange(valor){
+  const catEl=document.getElementById('cxp-f-categoriaEgreso'), sel=document.getElementById('cxp-f-subcategoria'), wrap=document.getElementById('cxp-subcat-wrap');
+  if(!catEl||!sel||!wrap) return;
+  const cat=catEl.value, cfg=subcatCfg(cat);
+  const previo=(valor!==undefined)?valor:sel.value;
+  wrap.style.display=cfg?'':'none';
+  if(!cfg){ sel.innerHTML=''; return; }
+  document.getElementById('cxp-subcat-label').textContent=cfg.titulo;
+  poblarSubcategoriaMateriales('cxp-f-subcategoria',previo,cat);
+}
+// Tras agregar o quitar opciones en el gestor, se refrescan los desplegables abiertos.
+function refrescarSubcatSelects(){
+  const v=document.getElementById('cxp-f-subcategoria')?.value;
+  try{ onEgrCategoriaChange(); }catch(e){}
+  try{ onCxpCategoriaChange(v); }catch(e){}
+}
 function openGestionarSubcatMateriales(cat){
   _subcatCat=subcatCfg(cat)?cat:'materiales';
   const cfg=subcatCfg(_subcatCat);
@@ -7579,7 +7603,7 @@ function quitarSubcatMaterial(nombre){
     S[cfg.key]=(S[cfg.key]||[]).filter(m=>m!==nombre);
     save();
     renderGestionarSubcatMaterialesLista();
-    onEgrCategoriaChange();
+    refrescarSubcatSelects();
   };
   if(enUso>0){
     icgConfirm(`Este ${esc(cfg.titulo.toLowerCase())} está usado en <strong>${enUso}</strong> registro(s) ya guardados. Si lo quitas, esos registros conservan el dato tal cual, solo deja de estar disponible para elegir en registros nuevos.<br><br>¿Continuar?`,'Tipo de Material en Uso','Quitar de Todas Formas',true).then(ok=>{ if(ok) seguir(); });
@@ -7599,7 +7623,7 @@ function confirmarNuevoSubcatMaterial(){
   save();
   input.value='';
   renderGestionarSubcatMaterialesLista();
-  onEgrCategoriaChange();
+  refrescarSubcatSelects();
 }
 function openGestionarCategorias(tipo){
   _gestionarCatTipo=tipo;
@@ -8154,6 +8178,12 @@ function calcFCTotales(itbisEditadoAMano){
 function closeFacturaCompraModal(){
   document.getElementById('cargarFacturaCompraModal').classList.remove('open');
 }
+function onFcCategoriaChange(){
+  const cat=document.getElementById('fc-categoria').value, cfg=subcatCfg(cat), wrap=document.getElementById('fc-subcat-wrap');
+  if(!wrap) return;
+  wrap.style.display=cfg?'':'none';
+  if(cfg){ document.getElementById('fc-subcat-label').textContent=cfg.titulo; poblarSubcategoriaMateriales('fc-subcategoria',undefined,cat); }
+}
 function resetFacturaCompraModal(){
   _fc = {};
   document.getElementById('fc-file-input').value='';
@@ -8255,7 +8285,8 @@ function renderRevisionFacturaCompra(){
       <div class="form-group"><label>Fecha Emisión</label><input autocomplete="off" type="date" id="fc-fecha-emision" value="${esc(p.fechaEmision||today())}"></div>
       <div class="form-group"><label>Fecha Vencimiento</label><input autocomplete="off" type="date" id="fc-fecha-vencimiento" value="${esc(p.fechaVencimiento||p.fechaEmision||today())}"></div>
       <div class="form-group" style="grid-column:span 2;"><label>Descripción</label><input autocomplete="off" type="text" id="fc-desc" value=""></div>
-      <div class="form-group"><label>Categoría</label><select id="fc-categoria"><option value="">— Elegir —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Categoría</label><select id="fc-categoria" onchange="onFcCategoriaChange()"><option value="">— Elegir —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select></div>
+      <div class="form-group" id="fc-subcat-wrap" style="display:none;"><label id="fc-subcat-label">Proceso</label><select id="fc-subcategoria"></select></div>
       <div class="form-group"><label>Subtotal (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="fc-subtotal" value="${fmtInputNum(p.subtotal)}" oninput="formatMontoInput(this);calcFCTotales(false)"></div>
       <div class="form-group"><label>ITBIS (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="fc-itbis" value="${fmtInputNum(p.itbis)}" oninput="formatMontoInput(this);calcFCTotales(true)"></div>
       <div class="form-group"><label>Total (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="fc-total" value="${fmtInputNum(p.total)}" oninput="formatMontoInput(this)"></div>
@@ -8324,6 +8355,7 @@ function confirmarCargaFacturaCompra(){
   const fechaVencimiento=document.getElementById('fc-fecha-vencimiento').value;
   const desc=document.getElementById('fc-desc').value.trim();
   const categoria=document.getElementById('fc-categoria').value;
+  _fc.subcategoria=subcatCfg(categoria)?(document.getElementById('fc-subcategoria')?.value||''):'';
   const subtotal=numVal('fc-subtotal');
   const itbis=numVal('fc-itbis');
   const total=numVal('fc-total');
@@ -8382,6 +8414,8 @@ function _procederConFacturaCompra(proveedorSelVal,proveedorNombre,ncf,numFactur
     const suplidorEncontrado=S.suplidores.find(s=>s.nombre===proveedorNombre);
     if(suplidorEncontrado) document.getElementById('egr-suplidor').value=suplidorEncontrado.id;
     document.getElementById('egr-categoria').value=categoria;
+    onEgrCategoriaChange();
+    if(_fc.subcategoria) document.getElementById('egr-subcategoria').value=_fc.subcategoria;
     document.getElementById('egr-desc').value=desc||`Fact. ${numFactura||ncf||proveedorNombre}`;
     document.getElementById('egr-numfactura').value=numFactura||ncf||'';
     // El Subtotal y el ITBIS capturados en "Cargar Factura de Compra" se copian tal cual al
@@ -8422,6 +8456,7 @@ function _procederConFacturaCompra(proveedorSelVal,proveedorNombre,ncf,numFactur
     // Misma clave real en ambos formularios ahora — ya no hace falta traducir por etiqueta.
     const catSel=document.getElementById('cxp-f-categoriaEgreso');
     if(catSel) catSel.value=categoria;
+    onCxpCategoriaChange(_fc.subcategoria||'');
     addCXP();
   }
 }
@@ -10423,7 +10458,7 @@ function autoEgresoFromCxP(item,amount,date,method,accountIdx,esHistorico=false,
     subtotal = r2(amount-itbis);
   }
   addEgreso(true,{fecha:date,suplidorId:null,suplidorNombre:item.nombre,categoria:cat,monto:amount,itbis,subtotal,
-    desc:item.concepto||item.nombre,metodo:method,ref,cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,fuenteItemId:item.id,fuenteSeccion:section,esHistorico,interesPrestamo:(typeof interesPrestamo==='number'?interesPrestamo:undefined)});
+    desc:item.concepto||item.nombre,metodo:method,ref,subcategoria:item.subcategoria||'',cuentaIdx:accountIdx,fuente:'cxp',fuenteId:fId,fuenteItemId:item.id,fuenteSeccion:section,esHistorico,interesPrestamo:(typeof interesPrestamo==='number'?interesPrestamo:undefined)});
   save();
 }
 // Reparación única: por un bug ya corregido en el código (los Egresos generados al pagar una
