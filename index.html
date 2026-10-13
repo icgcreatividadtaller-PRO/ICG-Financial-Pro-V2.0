@@ -398,10 +398,13 @@ tbody td{padding:13px 16px;vertical-align:middle;font-size:19px;color:var(--text
 .total-item{flex:1;min-width:110px;}
 .total-label{font-size:15px;color:var(--text3);letter-spacing:.14em;margin-bottom:4px;font-weight:700;}
 .total-value{font-family:var(--mono);font-size:28px;font-weight:600;}
-.consolidated-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin-bottom:26px;}
+.consolidated-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:26px;}
+@media(max-width:1100px){.consolidated-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:800px){.consolidated-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:600px){.consolidated-grid{grid-template-columns:minmax(0,1fr);}}
 .consolidated-card{
   background:var(--s1);border:1px solid var(--border2);
-  border-radius:6px;padding:18px 22px;cursor:pointer;
+  border-radius:6px;padding:16px 16px;cursor:pointer;min-width:0;
   transition:border-color .2s,box-shadow .2s,transform .2s;
 }
 .consolidated-card:hover{
@@ -409,10 +412,15 @@ tbody td{padding:13px 16px;vertical-align:middle;font-size:19px;color:var(--text
   box-shadow:0 0 30px rgba(129,140,248,.07);
   transform:translateY(-2px);
 }
-.consolidated-card h3{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;letter-spacing:.08em;}
-.cc-row-c{display:flex;justify-content:space-between;font-size:18px;padding:3px 0;}
+.consolidated-card h3{min-width:0;font-size:14px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;letter-spacing:.08em;}
+.cc-row-c{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:15px;padding:3px 0;white-space:nowrap;}
+.cc-row-c span:first-child{font-size:13px;letter-spacing:.03em;}
+.cc-row-c span:last-child{font-family:var(--mono);font-size:14.5px;letter-spacing:normal;}
+#globalTotals .bcard{min-width:0;padding-left:16px;padding-right:16px;}
+#globalTotals .bcard-label{font-size:13px;letter-spacing:.08em;}
+#globalTotals .bcard-value{font-size:clamp(16px,1.65vw,24px);white-space:nowrap;}
 .cc-sep{border-top:1px solid var(--border);margin:8px 0;}
-.cc-total{font-size:20px;font-weight:700;font-family:var(--mono);}
+.cc-total{font-size:17px!important;font-weight:700;font-family:var(--mono);}
 
 /* ── RENAME DIALOG ── */
 .rename-dialog{display:none;position:fixed;inset:0;background:rgba(2,5,16,.8);z-index:200;align-items:center;justify-content:center;}
@@ -7159,7 +7167,7 @@ function renderConsolidated(){
     const trE=acc.transactions.filter(t=>t.type==='egreso'&&t.method==='transferencia').reduce((s,t)=>s+t.amount,0);
     const cE=acc.transactions.filter(t=>t.type==='egreso'&&t.method==='efectivo').reduce((s,t)=>s+t.amount,0);
     return `<div class="consolidated-card" onclick="activateTab(${i})">
-      <h3><span style="width:8px;height:8px;border-radius:50%;background:${colors[i%colors.length]};display:inline-block;"></span>${esc(acc.name)}<span style="margin-left:auto;font-size:18px;color:#9ca3af;">${acc.transactions.length} movs.</span></h3>
+      <h3><span style="width:8px;height:8px;border-radius:50%;background:${colors[i%colors.length]};display:inline-block;"></span>${esc(acc.name)}<span style="margin-left:auto;font-size:13px;color:#9ca3af;white-space:nowrap;">${acc.transactions.length} movs.</span></h3>
       <div class="cc-row-c"><span style="color:#818cf8;">Balance Inicial</span><span style="color:#818cf8;font-family:var(--mono)">${fmt(init)}</span></div>
       <div class="cc-row-c"><span style="color:#6b7280">↑ Transf.</span><span style="color:#818cf8">${fmt(trI)}</span></div>
       <div class="cc-row-c"><span style="color:#6b7280">↑ Efectivo</span><span style="color:#818cf8">${fmt(cI)}</span></div>
