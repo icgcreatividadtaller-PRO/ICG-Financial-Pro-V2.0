@@ -9266,11 +9266,9 @@ function renderRevisionSuplidor(wrap){
           ${[...S.suplidores].sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(s=>`<option value="${s.id}" ${supMatch&&supMatch.id===s.id?'selected':''}>${esc(s.nombre)}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" style="grid-column:span 2;"><label>Factura / CxP a aplicar</label>
-        <select id="comp-sup-invoice" onchange="onCompSupInvoiceChange()">
-          <option value="" ${!mejorFacturaId?'selected':''}>Ninguna — registrar como Egreso suelto</option>
-          ${pendientes.map(x=>`<option value="${x.id}" ${String(x.id)===String(mejorFacturaId)?'selected':''}>${esc(x.nombre)} · Pendiente ${fmt(cxpPending(x))}</option>`).join('')}
-        </select>
+      <div class="form-group" style="grid-column:span 2;"><label>Facturas / CxP a aplicar <span style="font-weight:400;color:#6b7a99;">(marca una o varias — si no marcas ninguna se registra como Egreso suelto)</span></label>
+        <div id="comp-sup-facturas"></div>
+        <div id="comp-sup-facturas-resumen" style="font-size:14px;color:#8899bb;margin-top:6px;"></div>
       </div>
       <div class="form-group" id="comp-sup-cat-wrap" style="grid-column:span 2;"><label>Categoría <span style="font-weight:400;color:#6b7a99;">(solo si es Egreso suelto)</span></label>
         <select id="comp-sup-categoria" onchange="onCompSupCategoriaChange()"><option value="">— Elegir —</option>${getSelectableEgrCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select>
@@ -9283,15 +9281,59 @@ function renderRevisionSuplidor(wrap){
       </div>
       <div class="form-group" id="comp-sup-desc-wrap" style="grid-column:span 2;"><label>Descripción</label><input autocomplete="off" type="text" id="comp-sup-desc" value=""></div>
       <div class="form-group"><label>Fecha</label><input autocomplete="off" type="date" id="comp-sup-date" value="${esc(p.fecha||today())}"></div>
-      <div class="form-group"><label>Monto (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="comp-sup-amount" step="0.01" value="${fmtInputNum(p.monto)}" oninput="formatMontoInput(this)"></div>
+      <div class="form-group"><label>Monto (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="comp-sup-amount" step="0.01" value="${fmtInputNum(p.monto)}" oninput="formatMontoInput(this);compFacturasResumen('sup')"></div>
       <div class="form-group" style="grid-column:span 2;"><label>Referencia</label><input autocomplete="off" type="text" id="comp-sup-ref" value="${esc(p.referencia||'')}"></div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px;">
       <button class="btn btn-primary" onclick="confirmarComprobanteSuplidor()">Confirmar y Registrar</button>
     </div>`;
+  compRenderFacturas('sup', mejorFacturaId?[mejorFacturaId]:[]);
 }
 
-function onCompSupInvoiceChange(){/* placeholder para futura sincronización visual */}
+// ── Lista de facturas con casillas (Cargar Comprobante: suplidor y cliente) ──
+// Un solo comprobante puede pagar varias facturas: se marcan con casillas y el monto se reparte
+// de la más antigua a la más nueva. Con UNA marcada funciona como siempre; con VARIAS se registra
+// un pago por factura, reutilizando exactamente la misma lógica del pago individual.
+function compFacturasPendientes(tipo){
+  if(tipo==='sup'){
+    const sid=document.getElementById('comp-sup-select')?.value;
+    const sup=sid&&sid!=='__nuevo__'?S.suplidores.find(x=>String(x.id)===String(sid)):null;
+    return (S.cuentasPagar.proveedores||[]).filter(x=>x.estado!=='pagada'&&cxpPending(x)>0.009&&(!sup||normalizarTexto(x.nombre)===normalizarTexto(sup.nombre)))
+      .sort((a,b)=>String(a.fecha||a.vence||'').localeCompare(String(b.fecha||b.vence||'')));
+  }
+  const cid=document.getElementById('comp-cli-select')?.value;
+  const cli=cid?S.clientes.find(x=>String(x.id)===String(cid)):null;
+  return (S.cuentasCobrar||[]).filter(x=>!cxcEstaResuelta(x)&&cxcPending(x)>0.009&&(!cli||normalizarTexto(x.client)===normalizarTexto(cli.nombre)))
+    .sort((a,b)=>String(a.issued||'').localeCompare(String(b.issued||'')));
+}
+function compRenderFacturas(tipo, marcadas){
+  const box=document.getElementById('comp-'+tipo+'-facturas'); if(!box) return;
+  const sel=new Set((marcadas||compFacturasSel(tipo)).map(String));
+  const items=compFacturasPendientes(tipo);
+  box.innerHTML=items.length?`<div style="max-height:190px;overflow:auto;border:1px solid var(--border2);border-radius:6px;padding:4px 10px;">`+items.map(x=>{
+    const pend=tipo==='sup'?cxpPending(x):cxcPending(x);
+    const nombre=tipo==='sup'?esc(x.nombre)+(x.concepto?' · '+esc(x.concepto):''):esc(x.invoice)+' · '+esc(x.client);
+    const f=tipo==='sup'?(x.fecha||x.vence):x.issued;
+    return `<label style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;text-transform:none;letter-spacing:normal;font-size:15px;"><input type="checkbox" class="comp-chk-${tipo}" value="${x.id}" data-pend="${pend}" ${sel.has(String(x.id))?'checked':''} onchange="compFacturasResumen('${tipo}')" style="width:auto;margin:0;"><span style="flex:1;">${nombre}${f?` <span style="color:#6b7a99;">· ${fmtDate(f)}</span>`:''}</span><span class="td-mono" style="white-space:nowrap;">${fmt(pend)}</span></label>`;
+  }).join('')+'</div>':'<div style="color:#6b7a99;font-size:15px;">No hay facturas pendientes'+(tipo==='sup'?' para este suplidor.':' para este cliente.')+'</div>';
+  compFacturasResumen(tipo);
+}
+function compFacturasSel(tipo){ return [...document.querySelectorAll('.comp-chk-'+tipo+':checked')].map(c=>c.value); }
+function compFacturasResumen(tipo){
+  const el=document.getElementById('comp-'+tipo+'-facturas-resumen'); if(!el) return;
+  const m=[...document.querySelectorAll('.comp-chk-'+tipo+':checked')];
+  if(!m.length){ el.textContent=''; return; }
+  const total=r2(m.reduce((t,c)=>t+(parseFloat(c.dataset.pend)||0),0));
+  const monto=numVal('comp-'+tipo+'-amount')||0;
+  el.innerHTML=`Marcadas: <b>${m.length}</b> · Pendiente de ellas: <b>${fmt(total)}</b>`+(monto?` · Comprobante: <b>${fmt(monto)}</b>`:'');
+}
+// Reparte el monto del comprobante entre las facturas marcadas, de la más antigua a la más nueva.
+function compRepartir(items,monto,pendFn){
+  let resto=r2(monto); const reparto=[];
+  items.forEach(it=>{ if(resto<=0.009) return; const a=r2(Math.min(pendFn(it),resto)); reparto.push({it,a}); resto=r2(resto-a); });
+  return reparto;
+}
+function onCompSupInvoiceChange(){ compFacturasResumen('sup'); }
 
 // Permite crear un suplidor nuevo sin salir de "Cargar Comprobante" — abre el mismo modal
 // completo de Suplidor (Nombre, RNC, Categoría, Email, Teléfono, Dirección) que se usa desde
@@ -9304,6 +9346,7 @@ function onCompSupSelectChange(){
     sel.value=''; // si cancela el modal, el desplegable ya queda en un estado limpio
     openSuplidorModal(null,'comp-sup-select');
   }
+  compRenderFacturas('sup',[]); // al cambiar de suplidor, la lista muestra SUS facturas pendientes
 }
 // Igual que en Registrar Egreso: el Tipo de Material solo aplica dentro de "Materiales" y no
 // cambia la categoría contable — es solo un detalle adicional guardado junto al Egreso.
@@ -9315,7 +9358,9 @@ function onCompSupCategoriaChange(){
 }
 
 function confirmarComprobanteSuplidor(){
-  const invoiceId=document.getElementById('comp-sup-invoice').value;
+  const sel=compFacturasSel('sup');
+  if(sel.length>=2){ return confirmarComprobanteMultiSuplidor(sel); }
+  const invoiceId=sel[0]||'';
   const suplidorId=document.getElementById('comp-sup-select').value;
   if(suplidorId==='__nuevo__'){ notify('error','Suplidor sin Guardar','Presiona "Guardar" para crear el nuevo suplidor antes de continuar.'); return; }
   const categoria=document.getElementById('comp-sup-categoria')?.value||'';
@@ -9361,6 +9406,39 @@ function confirmarComprobanteSuplidor(){
   }
 }
 
+function confirmarComprobanteMultiSuplidor(ids){
+  const monto=numVal('comp-sup-amount')||0;
+  const fecha=document.getElementById('comp-sup-date').value;
+  const ref=document.getElementById('comp-sup-ref').value.trim();
+  const bancoIdx=parseInt(document.getElementById('comp-sup-cuenta').value);
+  const items=ids.map(id=>S.cuentasPagar.proveedores.find(x=>String(x.id)===String(id))).filter(Boolean)
+    .sort((a,b)=>String(a.fecha||a.vence||'').localeCompare(String(b.fecha||b.vence||'')));
+  const total=r2(items.reduce((t,x)=>t+cxpPending(x),0));
+  if(!fecha){ notify('error','Fecha Requerida','Selecciona la fecha del pago.'); return; }
+  if(monto<=0){ notify('error','Monto Inválido','Escribe el monto del comprobante.'); return; }
+  if(monto>total+0.009){ notify('error','Monto Excedido',`El comprobante (${fmt(monto)}) es mayor que lo pendiente de las facturas marcadas (${fmt(total)}).`); return; }
+  const reparto=compRepartir(items,monto,cxpPending);
+  const lineas=reparto.map(r=>`• ${esc(r.it.nombre)}${r.it.concepto?' · '+esc(r.it.concepto):''}: ${fmt(r.a)}${r.a<cxpPending(r.it)-0.009?' (pago parcial)':''}`).join('<br>');
+  const sinPago=items.length-reparto.length;
+  icgConfirm(`Se registrará un pago por cada factura:<br>${lineas}${sinPago?`<br><br>${sinPago} factura(s) marcada(s) quedan sin pago porque el monto no alcanza.`:''}`,'Pagar varias facturas','Registrar',false).then(ok=>{
+    if(!ok) return;
+    closeComprobanteModal();
+    compAplicarMultiSuplidor(reparto,fecha,ref,bancoIdx);
+  });
+}
+function compAplicarMultiSuplidor(reparto,fecha,ref,bancoIdx){
+  reparto.forEach(({it,a})=>{
+    openCXPPayModal('proveedores',it.id);
+    setCXPPayType('partial');
+    setMontoValue('cxp-pay-amount',a);
+    document.getElementById('cxp-pay-date').value=fecha;
+    document.getElementById('cxp-pay-ref').value=ref;
+    document.getElementById('cxp-pay-method').value='transferencia';
+    document.getElementById('cxp-pay-account').value=bancoIdx;
+    confirmCXPPayment();
+  });
+}
+
 // ── Cobro de Cliente ──
 function renderRevisionCliente(wrap){
   const p=_comp.parsed||{};
@@ -9382,16 +9460,14 @@ function renderRevisionCliente(wrap){
     <p style="font-size:15px;color:#8899bb;margin-bottom:14px;">${cliMatch?`Cliente detectado: <strong style="color:#818cf8;">${esc(cliMatch.nombre)}</strong>`:'No se detectó un cliente conocido — puedes elegirlo abajo.'}</p>
     <div class="form-grid">
       <div class="form-group" style="grid-column:span 2;"><label>Cliente</label>
-        <select id="comp-cli-select">
+        <select id="comp-cli-select" onchange="compRenderFacturas('cli',[])">
           <option value="">— Seleccionar —</option>
           ${S.clientes.map(c=>`<option value="${c.id}" ${cliMatch&&cliMatch.id===c.id?'selected':''}>${esc(c.nombre)}</option>`).join('')}
         </select>
       </div>
-      <div class="form-group" style="grid-column:span 2;"><label>Factura a aplicar</label>
-        <select id="comp-cli-invoice">
-          <option value="" ${!mejorFacturaId?'selected':''}>Ninguna — registrar como Ingreso/Recibo suelto</option>
-          ${pendientes.map(x=>`<option value="${x.id}" ${String(x.id)===String(mejorFacturaId)?'selected':''}>${esc(x.invoice)} · ${esc(x.client)} · Pendiente ${fmt(cxcPending(x))}</option>`).join('')}
-        </select>
+      <div class="form-group" style="grid-column:span 2;"><label>Facturas a aplicar <span style="font-weight:400;color:#6b7a99;">(marca una o varias — si no marcas ninguna se registra como Ingreso/Recibo suelto)</span></label>
+        <div id="comp-cli-facturas"></div>
+        <div id="comp-cli-facturas-resumen" style="font-size:14px;color:#8899bb;margin-top:6px;"></div>
       </div>
       <div class="form-group" style="grid-column:span 2;"><label>Categoría <span style="font-weight:400;color:#6b7a99;">(solo si es Ingreso/Recibo suelto)</span></label>
         <select id="comp-cli-categoria"><option value="">— Elegir —</option>${getSelectableIngCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select>
@@ -9401,16 +9477,54 @@ function renderRevisionCliente(wrap){
         <select id="comp-cli-cuenta">${S.accounts.map((a,i)=>`<option value="${i}" ${i===(cliBancoIdx??0)?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
       </div>
       <div class="form-group"><label>Fecha</label><input autocomplete="off" type="date" id="comp-cli-date" value="${esc(p.fecha||today())}"></div>
-      <div class="form-group"><label>Monto (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="comp-cli-amount" step="0.01" value="${fmtInputNum(p.monto)}" oninput="formatMontoInput(this)"></div>
+      <div class="form-group"><label>Monto (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="comp-cli-amount" step="0.01" value="${fmtInputNum(p.monto)}" oninput="formatMontoInput(this);compFacturasResumen('cli')"></div>
       <div class="form-group" style="grid-column:span 2;"><label>Referencia</label><input autocomplete="off" type="text" id="comp-cli-ref" value="${esc(p.referencia||'')}"></div>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px;">
       <button class="btn btn-primary" onclick="confirmarComprobanteCliente()">Confirmar y Registrar</button>
     </div>`;
+  compRenderFacturas('cli', mejorFacturaId?[mejorFacturaId]:[]);
+}
+
+function confirmarComprobanteMultiCliente(ids){
+  const monto=numVal('comp-cli-amount')||0;
+  const fecha=document.getElementById('comp-cli-date').value;
+  const ref=document.getElementById('comp-cli-ref').value.trim();
+  const bancoIdx=parseInt(document.getElementById('comp-cli-cuenta').value);
+  const items=ids.map(id=>S.cuentasCobrar.find(x=>String(x.id)===String(id))).filter(Boolean)
+    .sort((a,b)=>String(a.issued||'').localeCompare(String(b.issued||'')));
+  const total=r2(items.reduce((t,x)=>t+cxcPending(x),0));
+  if(!fecha){ notify('error','Fecha Requerida','Selecciona la fecha del cobro.'); return; }
+  if(monto<=0){ notify('error','Monto Inválido','Escribe el monto del comprobante.'); return; }
+  if(monto>total+0.009){ notify('error','Monto Excedido',`El comprobante (${fmt(monto)}) es mayor que lo pendiente de las facturas marcadas (${fmt(total)}).`); return; }
+  const reparto=compRepartir(items,monto,cxcPending);
+  const lineas=reparto.map(r=>`• ${esc(r.it.invoice)} · ${esc(r.it.client)}: ${fmt(r.a)}${r.a<cxcPending(r.it)-0.009?' (abono parcial)':''}`).join('<br>');
+  const sinPago=items.length-reparto.length;
+  icgConfirm(`Se registrará un cobro por cada factura (sin retenciones):<br>${lineas}${sinPago?`<br><br>${sinPago} factura(s) marcada(s) quedan sin cobro porque el monto no alcanza.`:''}`,'Cobrar varias facturas','Registrar',false).then(ok=>{
+    if(!ok) return;
+    closeComprobanteModal();
+    compAplicarMultiCliente(reparto,fecha,ref,bancoIdx);
+  });
+}
+function compAplicarMultiCliente(reparto,fecha,ref,bancoIdx){
+  reparto.forEach(({it,a})=>{
+    openPayModal(it.id);
+    setMontoValue('pay-monto-ahora',a);
+    calcPayNet();
+    document.getElementById('pay-date').value=fecha;
+    document.getElementById('pay-ref').value=ref;
+    document.getElementById('pay-method').value='transferencia';
+    onPayMethodChange(document.getElementById('pay-method'));
+    calcPayNet();
+    document.getElementById('pay-bank').value=bancoIdx;
+    confirmPayment();
+  });
 }
 
 function confirmarComprobanteCliente(){
-  const invoiceId=document.getElementById('comp-cli-invoice').value;
+  const sel=compFacturasSel('cli');
+  if(sel.length>=2){ return confirmarComprobanteMultiCliente(sel); }
+  const invoiceId=sel[0]||'';
   const clienteId=document.getElementById('comp-cli-select').value;
   const categoria=document.getElementById('comp-cli-categoria')?.value||'';
   const concepto=document.getElementById('comp-cli-concepto')?.value.trim()||'';
