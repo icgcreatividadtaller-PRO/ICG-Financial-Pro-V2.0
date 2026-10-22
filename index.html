@@ -1814,11 +1814,11 @@ function cargarLibreria(nombre){
           <button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarSubcatMateriales(document.getElementById('egr-categoria').value)" style="height:44px;width:44px;padding:0;flex-shrink:0;color:#818cf8;border-color:rgba(129,140,248,.3);font-size:18px;box-sizing:border-box;" title="Gestionar tipos de material">✎</button>
         </div>
       </div>
-      <div class="form-group" style="width:135px;flex-shrink:0;">
+      <div class="form-group" style="width:118px;flex-shrink:0;">
         <label>Subtotal (RD$)</label>
         <input autocomplete="off" type="text" inputmode="decimal" id="egr-subtotal" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(false);">
       </div>
-      <div class="form-group" style="width:200px;flex-shrink:0;">
+      <div class="form-group" style="width:160px;flex-shrink:0;">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
           <input type="checkbox" id="egr-tiene-itbis" onchange="toggleEgrItbis()" style="width:auto;cursor:pointer;">
           ITBIS (RD$)
@@ -1829,7 +1829,11 @@ function cargarLibreria(nombre){
         </div>
         <input autocomplete="off" type="text" inputmode="decimal" id="egr-itbis" placeholder="0.00" min="0" step="0.01" disabled style="height:44px;box-sizing:border-box;opacity:.4;" oninput="formatMontoInput(this);calcEgresoTotales(true);" title="Marca la casilla si esta compra incluye ITBIS. Elige 18% para que se calcule solo, u Otro valor para escribir el monto exacto (por ejemplo, compras de supermercado donde solo algunos artículos llevan ITBIS).">
       </div>
-      <div class="form-group" style="width:145px;flex-shrink:0;">
+      <div class="form-group" style="width:105px;flex-shrink:0;">
+        <label title="Otros impuestos de la factura que no son ITBIS (ej. ISC y CDT en facturas de telefonía). Se suman al Total y cuentan como gasto.">Otros imp.</label>
+        <input autocomplete="off" type="text" inputmode="decimal" id="egr-otros" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;" oninput="formatMontoInput(this);calcEgresoTotales(false);" title="ISC, CDT u otros impuestos que no son ITBIS. Se suman al Total.">
+      </div>
+      <div class="form-group" style="width:128px;flex-shrink:0;">
         <label>Total (RD$)</label>
         <input autocomplete="off" type="text" inputmode="decimal" id="egr-monto" placeholder="0.00" min="0" step="0.01" style="height:44px;box-sizing:border-box;font-weight:700;" oninput="formatMontoInput(this)">
       </div>
@@ -4437,7 +4441,8 @@ function calcEgresoTotales(itbisEditadoAMano){
     if(sub>0) setMontoValue(itbisEl,sub*0.18); else itbisEl.value='';
   }
   const itbis=tieneItbis?(numVal(itbisEl)||0):0;
-  const total = sub+itbis;
+  const otros=numVal('egr-otros')||0; // ISC, CDT u otros impuestos que no son ITBIS (facturas de telefonía, etc.)
+  const total = sub+itbis+otros;
   if(total>0) setMontoValue(totalEl,total); else totalEl.value='';
 }
 // Solo aplica a Proveedores (la única sección de CxP con desglose de Subtotal/ITBIS) — igual
@@ -4755,7 +4760,7 @@ function openPayModal(id){
   document.getElementById('pay-ref').value='';
   const sel=document.getElementById('pay-bank');
   sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`
-    +(S.cuentasPagar.prestamos||[]).filter(pr=>pr.estado!=='pagada'&&(parseFloat(pr.saldo)||0)>0.009).map(pr=>`<option value="comp:${pr.id}">Compensación contra préstamo: ${esc(pr.nombre)}${pr.concepto?' · '+esc(pr.concepto):''} (saldo ${fmt(parseFloat(pr.saldo)||0)})</option>`).join('');
+    +(S.cuentasPagar.prestamos||[]).filter(pr=>pr.estado!=='pagada'&&(parseFloat(pr.saldo)||0)>0.009&&!/TINTIN|PILY/i.test(pr.concepto||'')&&String(pr.nombre||'').trim().toUpperCase()!=='BHD').map(pr=>`<option value="comp:${pr.id}">Compensación contra préstamo: ${esc(pr.nombre)}${pr.concepto?' · '+esc(pr.concepto):''} (saldo ${fmt(parseFloat(pr.saldo)||0)})</option>`).join('');
   document.getElementById('pay-date').value=today();
   document.getElementById('pay-method').value='transferencia';
   onPayMethodChange(document.getElementById('pay-method'));
@@ -9804,7 +9809,7 @@ function refreshEgresoSelects(){
 }
 // Vacía el formulario "Registrar Egreso" (no toca nada ya registrado)
 function reiniciarFormEgreso(){
-  ['egr-subtotal','egr-itbis','egr-monto','egr-desc','egr-numfactura','egr-ref'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
+  ['egr-subtotal','egr-itbis','egr-otros','egr-monto','egr-desc','egr-numfactura','egr-ref'].forEach(function(id){ const e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('egr-fecha').value=today();
   document.getElementById('egr-suplidor').value='';
   document.getElementById('egr-categoria').selectedIndex=0;
@@ -9821,6 +9826,7 @@ function addEgreso(auto=false,data={}){
   const monto=r2(auto?data.monto:numVal('egr-monto')||0);
   const itbis=r2(auto?(data.itbis||0):(numVal('egr-itbis')||0));
   const subtotal=r2(auto?(data.subtotal||0):(numVal('egr-subtotal')||0));
+  const otrosImpuestos=r2(auto?(data.otrosImpuestos||0):(numVal('egr-otros')||0));
   const desc=auto?data.desc:document.getElementById('egr-desc').value.trim();
   const numFactura=auto?(data.numFactura||''):document.getElementById('egr-numfactura').value.trim();
   const metodo=auto?data.metodo:document.getElementById('egr-metodo').value;
@@ -9835,7 +9841,7 @@ function addEgreso(auto=false,data={}){
   const guardar=()=>{
     const suplidor=S.suplidores.find(x=>x.id===suplidorId);
     const egresoId=Date.now()+Math.random();
-    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&data.fuenteItemId!=null?{fuenteItemId:data.fuenteItemId,fuenteSeccion:data.fuenteSeccion||null}:{}),...(auto&&typeof data.interesPrestamo==='number'?{interesPrestamo:data.interesPrestamo}:{})});
+    S.egresos.push({id:egresoId,fecha,suplidorId,suplidorNombre:suplidor?.nombre||data.suplidorNombre||'',categoria:cat,subcategoria,monto,itbis,subtotal,...(otrosImpuestos>0?{otrosImpuestos}:{}),desc,numFactura,metodo,ref,cuentaIdx,esHistorico:auto?!!data.esHistorico:esHistorico,fuente:auto?data.fuente:'manual',fuenteId:auto?data.fuenteId:null,...(auto&&data.fuenteItemId!=null?{fuenteItemId:data.fuenteItemId,fuenteSeccion:data.fuenteSeccion||null}:{}),...(auto&&typeof data.interesPrestamo==='number'?{interesPrestamo:data.interesPrestamo}:{})});
     S.egresos.sort((a,b)=>a.fecha.localeCompare(b.fecha));
     if(!auto){
       if(esHistorico){
@@ -9862,6 +9868,7 @@ function addEgreso(auto=false,data={}){
       document.getElementById('egr-subtotal').value='';
       document.getElementById('egr-monto').value='';
       document.getElementById('egr-itbis').value='';
+      { const eo=document.getElementById('egr-otros'); if(eo) eo.value=''; }
       document.getElementById('egr-tiene-itbis').checked=false; toggleEgrItbis();
       toggleEgrItbis();
       document.getElementById('egr-desc').value='';
@@ -10162,7 +10169,7 @@ function renderEgresos(){
     const egrCatLabelConSubcat = x.subcategoria ? `${esc(egrCatLabel)} — ${esc(x.subcategoria)}` : esc(egrCatLabel);
     const egrDesc = x.desc ? x.desc.replace(/^Egreso:\s*[^–]*–\s*/,'').trim()||x.desc : '—';
     const egrDescConFactura = x.numFactura ? `<strong style="color:#8899bb;">Fact. ${esc(x.numFactura)}</strong>${egrDesc!=='—'?' – '+esc(egrDesc):''}` : esc(egrDesc);
-    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${egrCatLabelConSubcat}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="cambiarFechaEgreso(${x.id})" title="Cambiar Fecha" style="color:#fdc901;">📅</button>`:''}${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
+    return `<tr><td class="td-mono">${fmtDate(x.fecha)}</td><td>${esc(x.suplidorNombre)||'—'}</td><td><span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;">${egrCatLabelConSubcat}</span></td><td style="max-width:180px;">${egrDescConFactura}</td><td>${methodBadge(x.metodo)}</td><td style="color:#8899bb;">${esc(acct)}</td><td class="td-mono negative" style="font-weight:600;">${fmt(x.monto)}</td><td class="td-mono" style="color:#fdc901;">${x.itbis?fmt(x.itbis):'—'}${x.otrosImpuestos>0?`<div style="font-size:13px;color:#9ca3af;" title="Otros impuestos (ISC, CDT…) incluidos en el total">+ otros imp. ${fmt(x.otrosImpuestos)}</div>`:''}</td><td><span class="badge ${x.fuente==='cxp'?'badge-transfer':'badge-overdue'}">${x.fuente==='cxp'?'CxP':'Manual'}</span></td><td style="white-space:nowrap;"><button class="del-btn" onclick="cambiarCategoriaEgreso(${x.id})" title="Cambiar Categoría" style="color:#818cf8;">🏷️</button>${x.fuente==='manual'?`<button class="del-btn" onclick="cambiarFechaEgreso(${x.id})" title="Cambiar Fecha" style="color:#fdc901;">📅</button>`:''}${x.fuente==='manual'?`<button class="del-btn" onclick="delEgreso(${x.id})">×</button>`:''}</td></tr>`;
   }).join(''):`<tr><td colspan="10"><div class="empty-state">Sin egresos que coincidan con la búsqueda.</div></td></tr>`;
 }
 
