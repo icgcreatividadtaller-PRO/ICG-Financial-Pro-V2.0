@@ -4754,7 +4754,8 @@ function openPayModal(id){
   calcPayNet();
   document.getElementById('pay-ref').value='';
   const sel=document.getElementById('pay-bank');
-  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`;
+  sel.innerHTML=S.accounts.map((a,i)=>`<option value="${i}">${esc(a.name)}</option>`).join('')+`<option value="none">Histórico (no afecta ninguna cuenta)</option>`
+    +(S.cuentasPagar.prestamos||[]).filter(pr=>pr.estado!=='pagada'&&(parseFloat(pr.saldo)||0)>0.009).map(pr=>`<option value="comp:${pr.id}">Compensación contra préstamo: ${esc(pr.nombre)}${pr.concepto?' · '+esc(pr.concepto):''} (saldo ${fmt(parseFloat(pr.saldo)||0)})</option>`).join('');
   document.getElementById('pay-date').value=today();
   document.getElementById('pay-method').value='transferencia';
   onPayMethodChange(document.getElementById('pay-method'));
@@ -4800,7 +4801,10 @@ function confirmPayment(){
   const method=document.getElementById('pay-method').value;
   const bankSelVal=document.getElementById('pay-bank').value;
   const isEfectivo = method==='efectivo';
-  const isHistorico = bankSelVal==='none';
+  // Compensación: el cliente NO pagó con dinero, acreditó la factura contra un préstamo que le debes.
+  const prestamoComp = (!isEfectivo && String(bankSelVal).startsWith('comp:')) ? S.cuentasPagar.prestamos.find(pr=>String(pr.id)===String(bankSelVal).slice(5)) : null;
+  const isComp = !!prestamoComp;
+  const isHistorico = bankSelVal==='none' || isComp;
   const bankIdx=isHistorico?null:(isEfectivo?cajaGeneralIdx():(parseInt(bankSelVal)||0)); // efectivo entra a Caja General
   const ref=document.getElementById('pay-ref').value.trim();
   const montoAhora=numVal('pay-monto-ahora')||0;
@@ -4808,15 +4812,19 @@ function confirmPayment(){
   const retAmount=retType==='ninguna'?0:r2(numVal('pay-ret-amount')||0);
   const netAmount=r2(Math.max(0,montoAhora-retAmount)); // siempre calculado: cobrado − retención
   if(!date){notify('error','Fecha Requerida','Selecciona la fecha de cobro.');return;}
-  if(isHistorico && (x.issued||'')>=CUTOVER_V2){notify('error','Histórico No Permitido',`El modo Histórico solo aplica a facturas emitidas antes del 27/08/2026. Esta factura se emitió el ${fmtDate(x.issued)}: elige la cuenta donde entró el dinero.`);return;}
+  if(bankSelVal==='none' && (x.issued||'')>=CUTOVER_V2){notify('error','Histórico No Permitido',`El modo Histórico solo aplica a facturas emitidas antes del 27/08/2026. Esta factura se emitió el ${fmtDate(x.issued)}: elige la cuenta donde entró el dinero.`);return;}
   if(montoAhora<=0){notify('error','Monto Inválido','El monto a cobrar debe ser mayor a cero.');return;}
   const pendienteActual=cxcPending(x);
   if(montoAhora>pendienteActual+0.009){notify('error','Monto Excedido',`Ingresado: ${fmt(montoAhora)} · Pendiente: ${fmt(pendienteActual)}`);return;}
   if(netAmount<=0){notify('error','Monto Inválido','El monto a acreditar debe ser mayor a cero.');return;}
+  if(isComp){
+    if(retType!=='ninguna'){notify('error','Compensación sin Retenciones','Una compensación contra préstamo se registra sin retenciones. Si hay retención, cobra la factura de la forma normal.');return;}
+    if(montoAhora>(parseFloat(prestamoComp.saldo)||0)+0.009){notify('error','Excede el Préstamo',`La compensación (${fmt(montoAhora)}) es mayor que el saldo del préstamo (${fmt(parseFloat(prestamoComp.saldo)||0)}).`);return;}
+  }
 
   if(!x.pagos) x.pagos=[];
   const pagoId=Date.now()+Math.random();
-  x.pagos.push({id:pagoId,date,montoBruto:montoAhora,netAmount,method,bankIdx:isHistorico?null:bankIdx,retType,retAmount,ref});
+  x.pagos.push({id:pagoId,date,montoBruto:montoAhora,netAmount,method:isComp?'compensacion':method,bankIdx:isHistorico?null:bankIdx,retType,retAmount,ref,...(isComp?{prestamoId:prestamoComp.id}:{})});
 
   const nuevoPendiente=cxcPending(x);
   const quedaSaldada = nuevoPendiente<=0.009;
@@ -4837,10 +4845,21 @@ function confirmPayment(){
   // Histórico: mismo ingreso para el Estado de Resultados, pero sin tocar ninguna cuenta bancaria.
   // Cada abono es su propio ingreso — se identifica por el id del abono, no de la factura,
   // para que varios abonos a la misma factura no se pisen entre sí.
-  autoIngresoFromCxC(x, netAmount, date, method, isHistorico ? null : bankIdx, isHistorico, montoAhora, pagoId, ref);
+  autoIngresoFromCxC(x, netAmount, date, isComp?'compensacion':method, isHistorico ? null : bankIdx, isHistorico, montoAhora, pagoId, ref);
+  if(isComp){
+    // El ingreso (la venta) queda marcado como compensación: cuenta en el Estado de Resultados, pero no es efectivo ni toca bancos.
+    const ing=S.ingresos.find(i=>i.fuente==='cxc'&&i.fuenteId===pagoId);
+    if(ing){ ing.esCompensacion=true; ing.prestamoId=prestamoComp.id; }
+    prestamoComp.saldo=r2((parseFloat(prestamoComp.saldo)||0)-montoAhora);
+    if(!prestamoComp.compensaciones) prestamoComp.compensaciones=[];
+    prestamoComp.compensaciones.push({id:pagoId,fecha:date,monto:montoAhora,factura:x.invoice,cliente:x.client});
+    if(prestamoComp.saldo<=0.009){ prestamoComp.saldo=0; prestamoComp.estado='pagada'; prestamoComp.paidDate=date; }
+    save(); try{ renderCXP(); renderIngresos(); renderBalanceGeneral(); }catch(e){}
+  }
   let detail=`Abono: ${fmt(montoAhora)}`;
   if(retType!=='ninguna') detail+=`<br>Retención (${retType.toUpperCase()}): -${fmt(retAmount)}`;
-  detail+=`<br>Cobrado: ${fmt(netAmount)} ${isHistorico?'· <b>Histórico (sin cuenta)</b>':isEfectivo?'→ <b>Efectivo · '+esc(S.accounts[bankIdx]?.name)+'</b>':'→ '+esc(S.accounts[bankIdx]?.name)}`;
+  if(isComp) detail+=`<br>Compensado contra el préstamo de <b>${esc(prestamoComp.nombre)}</b> · saldo ahora: <b>${fmt(prestamoComp.saldo)}</b> · <b>no se movió ninguna cuenta bancaria</b>`;
+  else detail+=`<br>Cobrado: ${fmt(netAmount)} ${isHistorico?'· <b>Histórico (sin cuenta)</b>':isEfectivo?'→ <b>Efectivo · '+esc(S.accounts[bankIdx]?.name)+'</b>':'→ '+esc(S.accounts[bankIdx]?.name)}`;
   detail+= quedaSaldada ? `<br><strong style="color:#4ade80;">Factura completamente saldada</strong>` : `<br>Pendiente restante: <strong>${fmt(nuevoPendiente)}</strong>`;
   notify('success', quedaSaldada?'Factura Saldada':'Abono Registrado', detail);
 }
@@ -4910,6 +4929,51 @@ function confirmarCambiarCategoria(){
   notify('success','Categoría Actualizada',`${x.invoice} → ${getAllIngCats().find(c=>c.key===nuevaCat)?.label||nuevaCat}${ingresosActualizados?` · ${ingresosActualizados} ingreso(s) también actualizado(s)`:''}`);
 }
 
+// Deshace por completo el cobro de una factura: quita sus abonos, el Ingreso que generaron y el
+// movimiento de banco vinculado (si lo hubo), devuelve el saldo a un préstamo si el cobro fue una
+// compensación, y deja la factura pendiente. Guarda copia de seguridad antes.
+function deshacerCobroCXC(id){
+  const x=S.cuentasCobrar.find(i=>i.id===id); if(!x) return Promise.resolve(false);
+  const pagos=x.pagos||[];
+  if(!pagos.length){ icgAlert('Esta factura no tiene cobros registrados.','Nada que Deshacer'); return Promise.resolve(false); }
+  const ids=new Set(pagos.map(p=>p.id));
+  const ings=S.ingresos.filter(i=>i.fuente==='cxc' && (ids.has(i.fuenteId) || facturaDeIngreso(i)===x));
+  const bancos=[];
+  pagos.forEach(p=>{
+    if(p.method==='compensacion'||p.bankIdx==null) return;
+    let v=buscarTxVinculado('cxcPago',p.id);
+    if(!v){ // cobros viejos sin vínculo por ID: misma cuenta, fecha y monto, y descripción de cobro de CxC
+      const acc=S.accounts[p.bankIdx], t=acc&&(acc.transactions||[]).find(q=>q.type==='ingreso'&&q.date===p.date&&Math.abs(q.amount-p.netAmount)<0.01&&/^CxC /.test(q.desc||'')&&!bancos.some(b=>b.tx.id===q.id));
+      if(t) v={idx:p.bankIdx,tx:t};
+    }
+    if(v) bancos.push(v);
+  });
+  const totalBanco=bancos.reduce((t,v)=>t+v.tx.amount,0);
+  const msg=`Se va a deshacer el cobro de la factura <strong>${esc(x.invoice)}</strong> (${esc(x.client)}):<br><br>`
+    +`• Se quitan ${pagos.length} cobro(s) y ${ings.length} ingreso(s) del historial.<br>`
+    +(bancos.length?`• Se quita(n) ${bancos.length} movimiento(s) de banco por ${fmt(totalBanco)}, y el saldo de esa cuenta baja.<br>`:'• No hay movimiento de banco que quitar.<br>')
+    +(pagos.some(p=>p.prestamoId)?'• Se devuelve el saldo al préstamo contra el que se compensó.<br>':'')
+    +`• La factura vuelve a quedar pendiente de cobro.<br><br>Queda una copia de seguridad antes de hacerlo.`;
+  return icgConfirm(msg,'Deshacer Cobro','Deshacer',true).then(ok=>{
+    if(!ok) return false;
+    respaldoAuto('Antes de deshacer el cobro de una factura',{min:0});
+    bancos.forEach(v=>quitarTx(v.idx,v.tx.id));
+    pagos.forEach(p=>{
+      if(p.prestamoId){
+        const pr=S.cuentasPagar.prestamos.find(q=>q.id===p.prestamoId);
+        if(pr){ pr.saldo=r2((parseFloat(pr.saldo)||0)+(Number(p.montoBruto)||0)); pr.compensaciones=(pr.compensaciones||[]).filter(c=>c.id!==p.id); if(pr.estado==='pagada'){ pr.estado='pendiente'; pr.paidDate=null; } }
+      }
+    });
+    const idsIng=new Set(ings.map(i=>i.id));
+    S.ingresos=S.ingresos.filter(i=>!idsIng.has(i.id));
+    x.pagos=[]; x.estado='por_cobrar'; x.paidDate=null; x.payMethod=null; x.payBankIdx=null; x.amountPaid=0; x.retType='ninguna'; x.retAmount=0; x.payRef='';
+    save();
+    try{ renderCXC(); renderIngresos(); renderConsolidated(); renderCXP(); renderBalanceGeneral(); S.accounts.forEach((a,k)=>renderTx(k)); }catch(e){}
+    notify('success','Cobro Deshecho',`${esc(x.invoice)} volvió a estar pendiente de cobro.`);
+    return true;
+  });
+}
+
 function reopenCXC(id){
   const x=S.cuentasCobrar.find(i=>i.id===id); if(!x)return;
   icgConfirm('¿Reabrir esta factura como Pendiente de Cobro? El ingreso bancario no se revertirá automáticamente.','Reabrir Factura','Reabrir',false).then(ok=>{
@@ -4942,6 +5006,7 @@ function delCXC(id){
       const idsAEliminar=new Set(ingresosVinculados.map(i=>i.id));
       S.ingresos=S.ingresos.filter(i=>!idsAEliminar.has(i.id));
     }
+    pagos.forEach(p=>{ if(p.prestamoId){ const pr=S.cuentasPagar.prestamos.find(q=>q.id===p.prestamoId); if(pr){ pr.saldo=r2((parseFloat(pr.saldo)||0)+(Number(p.montoBruto)||0)); pr.compensaciones=(pr.compensaciones||[]).filter(c=>c.id!==p.id); if(pr.estado==='pagada'){ pr.estado='pendiente'; pr.paidDate=null; } } } });
     S.cuentasCobrar=S.cuentasCobrar.filter(i=>i.id!==id);
     save(); renderCXC(); renderIngresos();
   });
@@ -5150,6 +5215,7 @@ function renderCXC(){
         ${!isPaid?`<button class="del-btn" onclick="editCXC(${x.id})" title="Editar" style="color:#818cf8;">✎</button>`:''}
         ${isPaid?`<button class="del-btn" onclick="cambiarCategoriaCxCPagada(${x.id})" title="Cambiar Categoría (sin afectar el pago)" style="color:#818cf8;">🏷️</button>`:''}
         ${isPaid?`<button class="del-btn" onclick="reopenCXC(${x.id})" title="Reabrir" style="color:#818cf8;">↩</button>`:''}
+        ${((x.pagos||[]).length)?`<button class="del-btn" onclick="deshacerCobroCXC(${x.id})" title="Deshacer el cobro (quita el ingreso y su movimiento de banco, y deja la factura pendiente)" style="color:#fdc901;">↶</button>`:''}
         <button class="del-btn" onclick="delCXC(${x.id})" title="Eliminar">×</button>
       </td>
     </tr>`;
@@ -5210,6 +5276,7 @@ const CXP_CONFIG = {
       {id:'vence',     label:'Vence / Próximo Pago',     type:'date',  span:1},
       {id:'metodo',    label:'Forma de Pago',            type:'select',span:1, options:['Transferencia','Débito Automático','Efectivo','Cheque']},
       {id:'tasa',      label:'Tasa de Interés (%)',      type:'number',span:1, placeholder:'Ej: 12.5'},
+      {id:'anteriorV2',label:'Este préstamo ya existía antes de empezar el sistema (V2.0)', type:'checkbox', span:2},
     ],
     headers: ['Entidad','Préstamo','Categoría','Cuota','Saldo','Vencimiento','Tasa','Cuenta','Estado',''],
   },
@@ -5257,6 +5324,9 @@ function buildCXPForm(section){
   grid.innerHTML = cfg.fields.map(f=>{
     const spanStyle = f.span===2 ? 'grid-column:span 2;' : '';
     let input = '';
+    if(f.type==='checkbox'){
+      return `<div class="form-group" style="${spanStyle}"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;text-transform:none;letter-spacing:normal;"><input type="checkbox" id="cxp-f-${f.id}" style="width:auto;margin:0;"><span>${esc(f.label)}</span></label><div style="font-size:14px;color:#6b7a99;margin-top:4px;">Márcalo si la deuda es anterior al sistema: así se descuenta del capital de apertura y el Balance cuadra.</div></div>`;
+    }
     if(f.type==='subcat-select'){
       // Proceso (Impresión Offset) / Tipo de Material (Materiales): solo aparece si la categoría elegida lo tiene.
       return `<div class="form-group" id="cxp-subcat-wrap" style="${spanStyle}display:none;"><label id="cxp-subcat-label">Proceso</label><div style="display:flex;gap:6px;"><select id="cxp-f-subcategoria" style="flex:1;min-width:0;"></select><button type="button" class="btn btn-ghost btn-sm" onclick="openGestionarSubcatMateriales(document.getElementById('cxp-f-categoriaEgreso').value)" style="border-color:rgba(129,140,248,.3);color:#818cf8;padding:10px 12px;flex-shrink:0;" title="Gestionar">✎</button></div></div>`;
@@ -5329,7 +5399,8 @@ function addCXP(){
   const fieldsData = {};
   cfg.fields.forEach(f=>{
     const el = document.getElementById(`cxp-f-${f.id}`);
-    if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) fieldsData[f.id] = numVal(el)||0;
+    if(f.type==='checkbox') fieldsData[f.id] = !!(el&&el.checked);
+    else if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) fieldsData[f.id] = numVal(el)||0;
     else fieldsData[f.id] = f.type==='number' ? (parseFloat(el?.value)||0) : (el?.value||'');
   });
   if('subcategoria' in fieldsData && !subcatCfg(fieldsData.categoriaEgreso)) fieldsData.subcategoria='';
@@ -5365,6 +5436,7 @@ function addCXP(){
   cfg.fields.forEach(f=>{
     const el = document.getElementById(`cxp-f-${f.id}`);
     if(el && (f.type==='number'||f.type==='text')) el.value='';
+    if(el && f.type==='checkbox') el.checked=false;
   });
 }
 
@@ -5378,7 +5450,8 @@ function editCXPItem(section,id){
   cfg.fields.forEach(f=>{
     const el = document.getElementById(`cxp-f-${f.id}`);
     if(!el) return;
-    if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) setMontoValue(el, item[f.id]||0);
+    if(f.type==='checkbox') el.checked = !!item[f.id];
+    else if(f.type==='number' && (f.id==='monto'||f.id==='saldo'||f.id==='subtotal'||f.id==='itbis')) setMontoValue(el, item[f.id]||0);
     else el.value = item[f.id] ?? '';
   });
   if(section==='proveedores') onCxpCategoriaChange(item.subcategoria||'');
@@ -5777,6 +5850,7 @@ const FIN={
     });
     return o;
   },
+  compensacionesPrestamos(){ return sumC(S.ingresos.filter(i=>i.esCompensacion),i=>i.monto||0); },
   cxpTotal(){ const o=FIN.cxpPorSeccion(); return r2(o.proveedores+o.serviciosFijos+o.prestamos+o.otros); },
   // Para cada factura aún abierta: cuánto de su ITBIS y de su neto YA se reconoció en los Ingresos
   // generados por sus cobros (usando lo realmente guardado, no una fórmula): así cualquier redondeo
@@ -5813,7 +5887,7 @@ const FIN={
     const inventario=0; // no se lleva inventario formal — confirmado con el usuario
     const totalActivosFijos=sumC(S.activosFijos,x=>x.monto);
     // Dinero "Histórico" (no toca bancos) sube el Capital vía Utilidades Retenidas; este Activo es su contraparte.
-    const historicoIngresosNeto=sumC(S.ingresos.filter(x=>x.esHistorico),FIN.ingresoNeto);
+    const historicoIngresosNeto=sumC(S.ingresos.filter(x=>x.esHistorico&&!x.esCompensacion),FIN.ingresoNeto); // una compensación contra préstamo NO es efectivo
     const historicoEgresosNeto=sumC(S.egresos.filter(x=>x.esHistorico),FIN.egresoCaja);
     const efectivoNoBancarizado=r2(historicoIngresosNeto-historicoEgresosNeto);
 
@@ -5841,7 +5915,7 @@ const FIN={
     const ajustesDeCorte=r2(ajC);
     const prestamosAperturaBHD=sumC(S.cuentasPagar.prestamos.filter(p=>{
       const c=(p.concepto||'').trim().toUpperCase();
-      return (c.includes('TINTIN')||c.includes('PILY'))&&p.estado!=='pagada';
+      return (c.includes('TINTIN')||c.includes('PILY')||p.anteriorV2===true)&&p.estado!=='pagada';
     }),p=>parseFloat(p.saldo)||0);
     const tarjetaAperturaAdeudo=Math.max(0,r2(limitRD-(S.creditCard.initAvailRD??S.creditCard.availableRD??0)));
     // ITBIS de facturas emitidas ANTES del 27-ago-2026: ya resuelto en V1; el dinero cobrado lo trae adentro → capital de apertura.
@@ -5855,7 +5929,8 @@ const FIN={
     const capitalAperturaTransicion=Math.max(0,r2((S.capitalAperturaTransicion||0)-itbisPreAperturaCobrado));
     const capitalTitular=r2(totalActivosFijos+saldosInicialesCuentas+ajustesDeCorte-prestamosAperturaBHD-tarjetaAperturaAdeudo+capitalAperturaTransicion+itbisPreApertura);
     const ingresosNetosHistoricos=sumC(S.ingresos,FIN.ingresoNeto);
-    const egresosHistoricos=sumC(S.egresos,FIN.egresoBalance);
+    // La deuda que se paga por compensación (el cliente acredita facturas contra un préstamo) es capital devuelto: no es gasto, pero reduce las utilidades retenidas igual que cualquier pago de préstamo.
+    const egresosHistoricos=r2(sumC(S.egresos,FIN.egresoBalance)+FIN.compensacionesPrestamos());
     const utilidadesRetenidas=r2(ingresosNetosHistoricos-egresosHistoricos);
     const distribucionesHistoricas=sumC(S.distribuciones,x=>x.monto);
     const totalCapital=r2(capitalTitular+utilidadesRetenidas-distribucionesHistoricas);
@@ -5949,7 +6024,7 @@ const FIN={
 // Lo que separa la utilidad del Estado de Resultados de las Utilidades Retenidas del Balance:
 // remesas a la DGII y capital de préstamos (ambos salen de caja pero no son gasto).
 function utilidadPLEnBalance(utilPL){
-  const noGasto=sumC(S.egresos,x=>FIN.egresoBalance(x)-montoGastoPL(x));
+  const noGasto=r2(sumC(S.egresos,x=>FIN.egresoBalance(x)-montoGastoPL(x))+FIN.compensacionesPrestamos());
   return r2(utilPL-noGasto);
 }
 
@@ -6545,7 +6620,7 @@ function renderBalanceGeneral(){
         ${fila('Activos Fijos', totalActivosFijos, true)}
         ${fila('Saldos Iniciales de Cuentas', saldosInicialesCuentas, true)}
         ${fila('Ajustes de Corte de Balance', ajustesDeCorte, true)}
-        ${fila('− Préstamos de Apertura (TINTIN+PILY)', -prestamosAperturaBHD, true)}
+        ${fila('− Préstamos de Apertura (anteriores a la V2.0)', -prestamosAperturaBHD, true)}
         ${fila('− Tarjeta de Apertura', -tarjetaAperturaAdeudo, true)}
         ${fila('Capital del Titular', capitalTitular)}
         ${fila('Ingresos Netos (histórico total, sin ITBIS)', ingresosNetosHistoricos, true)}
