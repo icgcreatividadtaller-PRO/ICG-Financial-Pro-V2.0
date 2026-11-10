@@ -2832,7 +2832,7 @@ function cargarLibreria(nombre){
       </div>
 
       <div id="cf-step-upload">
-        <p style="font-size:13px;color:#8899bb;line-height:1.6;margin-bottom:16px;">Sube el PDF de la factura tal como la generaste. El sistema lee el cliente, NCF, fechas, montos — y si está marcada como ANULADA, la reconoce automáticamente. Tú revisas todo antes de guardar y le asignas la categoría.</p>
+        <p style="font-size:13px;color:#8899bb;line-height:1.6;margin-bottom:16px;">Sube el PDF de la factura electrónica (e-CF) tal como la generó el facturador de la DGII. El sistema lee el cliente y su RNC, el e-NCF, la fecha de emisión y los montos. Tú revisas todo antes de guardar y eliges el plazo de pago y la categoría.</p>
         <div class="hud-file" style="padding:12px;border:1px solid rgba(34,211,238,.25);border-radius:6px;background:rgba(34,211,238,.03);">
           <input autocomplete="off" type="file" id="cf-file-input" accept="application/pdf,image/*" onchange="handleFacturaFile(this)" style="color:#8899bb;font-size:12px;font-family:var(--font);">
         </div>
@@ -4689,7 +4689,10 @@ function crearFacturaHistorica(datos){
 // Asume el formato estándar de la DGII: prefijo (letra + tipo) + 8 dígitos correlativos.
 function parseNCF(ncf){
   const limpio=(ncf||'').trim().toUpperCase();
-  const m=limpio.match(/^([A-Z0-9]+?)(\d{8})$/);
+  // e-NCF (factura electrónica): E + tipo de 2 dígitos (E31, E32...) + secuencia de 10 dígitos.
+  // Se deja explícito para que el correlativo sea siempre el de 10 dígitos reales.
+  let m=limpio.match(/^(E\d{2})(\d{10})$/);
+  if(!m) m=limpio.match(/^([A-Z0-9]+?)(\d{8})$/);
   if(!m) return null;
   return {prefijo:m[1], numero:parseInt(m[2],10), digitos:m[2].length};
 }
@@ -8589,7 +8592,7 @@ async function handleFacturaFile(input){
   try{
     let texto='';
     if(file.type==='application/pdf'){
-      texto=await extraerTextoPDF(file);
+      texto=await extraerTextoPDF(file,6);
       if((texto||'').trim().length<40){
         // Muy poco texto real — probablemente es una foto/escaneo, no un PDF de texto.
         // Se cae a OCR como respaldo, igual que en Cargar Comprobante.
@@ -8616,56 +8619,106 @@ async function handleFacturaFile(input){
 // Extrae el texto real de un PDF (no una imagen) usando pdf.js, reconstruyendo líneas
 // por posición vertical — así los regex de campos pueden leerlo de forma parecida a
 // como se ve el documento, en vez de recibir el texto en cualquier orden.
-async function extraerTextoPDF(file){
+async function extraerTextoPDF(file, maxPaginas=1){
   await cargarLibreria('pdf');
   pdfjsLib.GlobalWorkerOptions.workerSrc=PDF_WORKER_URL;
   const buf=await file.arrayBuffer();
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-  const page=await pdf.getPage(1);
-  const content=await page.getTextContent();
-  const items=content.items.map(it=>({str:it.str, x:it.transform[4], y:it.transform[5]}));
-  items.sort((a,b)=> b.y-a.y || a.x-b.x);
-  const TOL=3;
-  const lineas=[];
-  items.forEach(it=>{
-    if(!it.str || !it.str.trim()) return;
-    let linea=lineas.find(l=>Math.abs(l.y-it.y)<TOL);
-    if(!linea){ linea={y:it.y, partes:[]}; lineas.push(linea); }
-    linea.partes.push(it);
-  });
-  lineas.forEach(l=>l.partes.sort((a,b)=>a.x-b.x));
-  return lineas.map(l=>l.partes.map(p=>p.str).join(' ')).join('\n');
+  const nPag=Math.min(pdf.numPages||1, Math.max(1,maxPaginas));
+  const textoPaginas=[];
+  for(let n=1;n<=nPag;n++){
+    const page=await pdf.getPage(n);
+    const content=await page.getTextContent();
+    const items=content.items.map(it=>({str:it.str, x:it.transform[4], y:it.transform[5]}));
+    items.sort((a,b)=> b.y-a.y || a.x-b.x);
+    const TOL=3;
+    const lineas=[];
+    items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      let linea=lineas.find(l=>Math.abs(l.y-it.y)<TOL);
+      if(!linea){ linea={y:it.y, partes:[]}; lineas.push(linea); }
+      linea.partes.push(it);
+    });
+    lineas.forEach(l=>l.partes.sort((a,b)=>a.x-b.x));
+    const txt=lineas.map(l=>l.partes.map(p=>p.str).join(' '));
+    // En documentos de varias páginas, el número de página del pie (una línea que es solo
+    // un número) no debe mezclarse con el contenido de la tabla.
+    if(nPag>1 && txt.length && /^\s*\d{1,3}\s*$/.test(txt[txt.length-1])) txt.pop();
+    textoPaginas.push(txt.join('\n'));
+  }
+  return textoPaginas.join('\n');
 }
 
 function fechaAISO(ddmmyyyy){
-  const m=(ddmmyyyy||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const m=(ddmmyyyy||'').match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
   if(!m) return null;
   return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
 }
 
-// Analiza el texto de una factura de venta (propia, generada por el sistema de
-// cotización de ICG) y extrae los campos clave. Diseñado para el formato específico
-// de esas facturas — cliente, NCF, fechas, montos, y si está marcada ANULADA.
+// Analiza el texto de una factura de venta PROPIA en el formato de la factura electrónica
+// (e-CF) que emite el facturador de la DGII. Los B01 ya no son válidos en este sistema.
+// OJO: la "Fecha Vencimiento" que trae el PDF NO es el plazo de pago del cliente — es la
+// vigencia de la secuencia de e-NCF autorizada por la DGII (ej. 31-12-2027), así que se ignora.
+// El plazo de pago se elige en la ventana de revisión.
 function parseFacturaVenta(texto){
-  const t=texto||'';
-  const out={ncf:null,fechaExpedicion:null,fechaVencimiento:null,clienteNombre:null,clienteRNC:null,
-             descripcion:null,subtotal:null,itbis:null,total:null,anulada:false};
-  out.anulada = /ANULADA/i.test(t);
+  const t=(texto||'').replace(/\r/g,'');
+  const out={ncf:null,tipoECF:null,fechaExpedicion:null,fechaVencimiento:null,clienteNombre:null,clienteRNC:null,
+             descripcion:null,subtotal:null,subtotalGravado:null,subtotalExento:null,itbis:null,total:null,
+             otrosImpuestos:0,otrosDetalle:[],anulada:false,esECF:false};
+  out.anulada = /ANULAD[AO]/i.test(t);
+  const num=(str)=>parseFloat(String(str).replace(/,/g,''));
+  // Lee el monto que sigue a una etiqueta; si lo que hay es "-" (vacío), devuelve 0.
+  const montoDe=(etiqueta)=>{
+    const m=t.match(new RegExp(etiqueta+'\\s*:?\\s*(?:RD\\$)?\\s*([\\d,]+(?:\\.\\d{1,2})?)(?![\\d])','i'));
+    return m ? num(m[1]) : null;
+  };
   let m;
-  m=t.match(/NCF\s+([A-Z]\d{9,15})/i); if(m) out.ncf=m[1].toUpperCase();
-  m=t.match(/FECHA\s*DE\s*EXPEDICI[OÓ]N\D*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m) out.fechaExpedicion=fechaAISO(m[1]);
-  m=t.match(/FECHA\s*DE\s*VENCIMIENTO\D*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m) out.fechaVencimiento=fechaAISO(m[1]);
-  m=t.match(/SE[ÑN]OR\(ES\)\s+([^\n]+)/i); if(m) out.clienteNombre=m[1].replace(/\s+/g,' ').trim();
-  m=t.match(/\bRNC\b\D{0,3}(\d[\d\-]{6,})/i); if(m) out.clienteRNC=m[1];
-  m=t.match(/Subtotal\s+RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.subtotal=parseFloat(m[1].replace(/,/g,''));
-  m=t.match(/ITBIS\s*\([\d.]+%\)\s*RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.itbis=parseFloat(m[1].replace(/,/g,''));
-  m=t.match(/\bTotal\b\s+RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.total=parseFloat(m[1].replace(/,/g,''));
-  // Descripción: lo que hay entre el encabezado de la tabla y el primer monto en RD$
-  m=t.match(/Producto\/?\s*servicio[^\n]*\n([\s\S]*?)RD\$/i);
-  if(m){
-    out.descripcion = m[1].replace(/\s+/g,' ').replace(/\d+\s*$/,'').trim();
-  }
+  // e-NCF: E + 2 dígitos de tipo + 10 de secuencia (13 caracteres)
+  m=t.match(/\be-?\s*NCF\b\s*:?\s*(E\d{12})\b/i) || t.match(/\b(E\d{12})\b/);
+  if(m){ out.ncf=m[1].toUpperCase(); out.tipoECF=out.ncf.slice(0,3); out.esECF=true; }
+  m=t.match(/Fecha\s*(?:de\s*)?Emisi[oó]n\s*:?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/i); if(m) out.fechaExpedicion=fechaAISO(m[1]);
+  m=t.match(/Raz[oó]n\s*Social\s*Cliente\s*:?\s*([^\n]+)/i); if(m) out.clienteNombre=m[1].replace(/\s+/g,' ').trim();
+  // RNC del cliente (el RNC que aparece primero en el documento es el del emisor, es decir, el tuyo)
+  m=t.match(/RNC\s*Cliente\s*:?\s*(\d[\d\-]{6,})/i); if(m) out.clienteRNC=m[1].replace(/\D/g,'');
+  out.subtotalGravado=montoDe('Subtotal\\s*Gravado');
+  out.subtotalExento=montoDe('Subtotal\\s*Exento');
+  out.itbis=montoDe('Total\\s*ITBIS');
+  out.total=montoDe('Monto\\s*Total');
+  if(out.subtotalGravado!=null || out.subtotalExento!=null) out.subtotal=Math.round(((out.subtotalGravado||0)+(out.subtotalExento||0))*100)/100;
+  if(out.itbis==null && out.subtotal!=null) out.itbis=0;
+  // Otros impuestos que el sistema no separa (ISC, CDT, propina...) — se detectan para avisar.
+  [['Otros\\s*Impuestos\\s*Adicionales','Otros impuestos adicionales'],['Total\\s*ISCe','ISC específico'],['Total\\s*ISCav','ISC ad valorem'],['CDT','CDT'],['Propina\\s*Legal','Propina legal']].forEach(([re,nombre])=>{
+    const v=montoDe('(?:^|\\n)\\s*'+re);
+    if(v && v>0){ out.otrosImpuestos=Math.round((out.otrosImpuestos+v)*100)/100; out.otrosDetalle.push(nombre+' '+v.toLocaleString('en-US',{minimumFractionDigits:2})); }
+  });
+  if(out.subtotal==null && out.total!=null) out.subtotal=Math.round((out.total-(out.itbis||0)-out.otrosImpuestos)*100)/100;
+  out.descripcion=extraerDescripcionECF(t);
   return out;
+}
+
+// Descripción de los renglones: lo que hay entre el encabezado de la tabla ("Cant Descripción ...")
+// y "Subtotal Gravado". Cada renglón empieza con su cantidad y termina con las columnas de precio,
+// ITBIS, descuento, recargo y valor; las líneas siguientes sin cifras son la continuación de la
+// descripción (el texto largo se parte en varias líneas dentro de la celda).
+function extraerDescripcionECF(t){
+  const lineas=t.split('\n').map(l=>l.trim());
+  const ini=lineas.findIndex(l=>/^Cant\.?\s+Descripci[oó]n/i.test(l));
+  if(ini<0) return null;
+  const MONTO='(?:[\\d,]+\\.\\d{2}|-)';
+  const reRenglon=new RegExp('^[\\d.,]+\\s+(.+?)\\s+(?:\\S+\\s+)?[\\d,]+\\.\\d{2}\\s+'+MONTO+'\\s+'+MONTO+'\\s+'+MONTO+'\\s+[\\d,]+\\.\\d{2}$');
+  const items=[];
+  for(let i=ini+1;i<lineas.length;i++){
+    const l=lineas[i];
+    if(!l) continue;
+    if(/^Subtotal\s*Gravado/i.test(l)) break;
+    if(/^Cant\.?\s+Descripci[oó]n/i.test(l)) continue; // encabezado repetido en la página siguiente
+    const r=l.match(reRenglon);
+    if(r) items.push(r[1].trim());
+    else if(items.length) items[items.length-1]+=' '+l;
+    else items.push(l);
+  }
+  const txt=items.map(x=>x.replace(/\s+/g,' ').trim()).filter(Boolean).join(' / ');
+  return txt||null;
 }
 
 function onFacturaTextoListo(texto){
@@ -8679,7 +8732,11 @@ function renderRevisionFactura(){
   const p=_cf.parsed||{};
   const wrap=document.getElementById('cf-step-review');
   wrap.style.display='';
-  const clienteMatch = p.clienteNombre ? buscarEntidadEnTextoCompleto(p.clienteNombre, S.clientes, 'nombre') : null;
+  // El RNC es más confiable que el nombre: primero se busca el cliente por RNC, y solo si no
+  // aparece se intenta por nombre.
+  const rncNorm=(x)=>String(x||'').replace(/\D/g,'');
+  const clienteMatch = (p.clienteRNC && S.clientes.find(c=>rncNorm(c.rnc)===rncNorm(p.clienteRNC)))
+    || (p.clienteNombre ? buscarEntidadEnTextoCompleto(p.clienteNombre, S.clientes, 'nombre') : null);
   const gap = p.ncf ? verificarSecuenciaNCF(p.ncf) : null;
   const esAnuladaInicial = !!p.anulada;
 
@@ -8689,6 +8746,19 @@ function renderRevisionFactura(){
       </div>`
     : '';
 
+  const _estAviso='border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;';
+  const avisoSinECF = !p.ncf
+    ? `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);${_estAviso}color:#f3b4b4;">
+        ⚠️ <strong>No encontré un e-NCF</strong> en este documento. Este lector entiende la factura de crédito fiscal electrónica (e-CF); si es otro tipo de documento, escribe los datos a mano.
+      </div>` : '';
+  const avisoNota = (p.tipoECF==='E33' || p.tipoECF==='E34')
+    ? `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);${_estAviso}color:#f3b4b4;">
+        ⚠️ Este documento es una <strong>nota de ${p.tipoECF==='E34'?'crédito':'débito'} (${p.tipoECF})</strong>, no una factura. No la cargues por aquí: el sistema la registraría como una venta normal.
+      </div>` : '';
+  const avisoOtros = (p.otrosImpuestos>0)
+    ? `<div style="background:rgba(253,201,1,.08);border:1px solid rgba(253,201,1,.35);${_estAviso}color:#f0dba0;">
+        ⚠️ Esta factura trae otros impuestos que el sistema no separa: <strong>${esc(p.otrosDetalle.join(', '))}</strong>.
+      </div>` : '';
   const avisoGap = gap
     ? `<div style="background:rgba(253,201,1,.08);border:1px solid rgba(253,201,1,.35);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#f0dba0;">
         ⚠️ Parece que falta la factura <strong>${esc(gap.ncfFaltante)}</strong> en el sistema — no la encuentro registrada.
@@ -8696,6 +8766,9 @@ function renderRevisionFactura(){
     : '';
 
   wrap.innerHTML = `
+    ${avisoSinECF}
+    ${avisoNota}
+    ${avisoOtros}
     ${avisoGap}
     ${avisoAnulada}
     <div class="form-grid">
@@ -8708,8 +8781,17 @@ function renderRevisionFactura(){
       </div>
       <div class="form-group"><label>NCF</label><input autocomplete="off" type="text" id="cf-ncf" value="${esc(p.ncf||'')}"></div>
       <div class="form-group"><label>Categoría</label><select id="cf-categoria" ${esAnuladaInicial?'disabled':''}><option value="">— Elegir —</option>${getAllIngCats().map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('')}</select></div>
-      <div class="form-group"><label>Fecha Emisión</label><input autocomplete="off" type="date" id="cf-fecha-emision" value="${esc(p.fechaExpedicion||today())}"></div>
-      <div class="form-group"><label>Fecha Vencimiento</label><input autocomplete="off" type="date" id="cf-fecha-vencimiento" value="${esc(p.fechaVencimiento||today())}"></div>
+      <div style="grid-column:span 2;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div class="form-group"><label>Fecha Emisión</label><input autocomplete="off" type="date" id="cf-fecha-emision" value="${esc(p.fechaExpedicion||today())}" onchange="cfRecalcVenc()"></div>
+        <div class="form-group"><label>Plazo de pago</label>
+          <select id="cf-plazo" onchange="cfRecalcVenc()">
+            <option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option>
+            <option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option>
+            <option value="custom">Personalizado</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Vencimiento</label><input autocomplete="off" type="date" id="cf-fecha-vencimiento" value="${esc(p.fechaExpedicion||today())}" onchange="cfVencManual()"></div>
+      </div>
       <div class="form-group" style="grid-column:span 2;"><label>Descripción</label><input autocomplete="off" type="text" id="cf-desc" value="${esc(p.descripcion||'')}"></div>
       <div class="form-group"><label>Subtotal (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-subtotal" value="${fmtInputNum(p.subtotal)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
       <div class="form-group"><label>ITBIS (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-itbis" value="${fmtInputNum(p.itbis)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
@@ -8731,6 +8813,19 @@ function renderRevisionFactura(){
       <button class="btn btn-ghost" onclick="closeCargarFacturaModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="confirmarCargaFactura()">Confirmar y Registrar</button>
     </div>`;
+}
+
+// Plazo de pago → Fecha de Vencimiento (el PDF del e-CF no trae el plazo; la "Fecha Vencimiento"
+// que imprime es la vigencia de la secuencia de e-NCF, no la del cliente).
+function cfRecalcVenc(){
+  const em=document.getElementById('cf-fecha-emision')?.value;
+  const dias=parseInt(document.getElementById('cf-plazo')?.value);
+  if(!em || isNaN(dias)) return; // "Personalizado": no se toca la fecha escrita a mano
+  const d=new Date(em+'T00:00:00'); d.setDate(d.getDate()+dias);
+  document.getElementById('cf-fecha-vencimiento').value=d.toISOString().slice(0,10);
+}
+function cfVencManual(){
+  const sel=document.getElementById('cf-plazo'); if(sel) sel.value='custom';
 }
 
 function toggleCfAnulada(){
@@ -8757,6 +8852,9 @@ async function confirmarCargaFactura(){
   const esHistorico = !!document.getElementById('cf-es-historico')?.checked;
 
   if(!ncf){ notify('error','Falta el NCF','No se detectó — escríbelo a mano antes de continuar.'); return; }
+  if(_cf.parsed?.tipoECF==='E34' || _cf.parsed?.tipoECF==='E33'){
+    notify('error','No es una factura','Este documento es una nota de crédito/débito. No se puede cargar como factura de venta.'); return;
+  }
 
   // El OCR no siempre logra leer el Subtotal/ITBIS del PDF (depende del formato exacto del
   // documento) — si el Total sí se detectó pero Subtotal/ITBIS quedaron en cero, avisa antes de
@@ -8767,6 +8865,25 @@ async function confirmarCargaFactura(){
       'Subtotal/ITBIS No Detectado','Continuar de Todas Formas',true,'Cancelar y Corregir a Mano'
     );
     if(!seguir) return;
+  }
+
+  // Los montos deben cuadrar: Subtotal + ITBIS (+ otros impuestos, si la factura los trae) = Total.
+  if(!esAnulada && total>0){
+    const otros=_cf.parsed?.otrosImpuestos||0;
+    const sumaCalc=Math.round((subtotal+itbis+otros)*100)/100;
+    const dif=Math.round((sumaCalc-total)*100)/100;
+    if(Math.abs(dif)>0.05){
+      const seguir = await icgConfirm(
+        `Los montos no cuadran: Subtotal <strong>${fmt(subtotal)}</strong> + ITBIS <strong>${fmt(itbis)}</strong>${otros>0?` + otros impuestos <strong>${fmt(otros)}</strong>`:''} suman <strong>${fmt(sumaCalc)}</strong>, pero el Total es <strong>${fmt(total)}</strong> (diferencia ${fmt(dif)}).<br><br>Revisa las cifras antes de guardar.`,
+        'Los Montos No Cuadran','Continuar de Todas Formas',true,'Cancelar y Corregir');
+      if(!seguir) return;
+    }
+    if(otros>0){
+      const seguir2 = await icgConfirm(
+        `Esta factura trae otros impuestos (${esc((_cf.parsed?.otrosDetalle||[]).join(', '))}) que el sistema no registra por separado: quedarían dentro del Total, pero no en el Subtotal ni en el ITBIS.<br><br>¿Quieres continuar así?`,
+        'Otros Impuestos en la Factura','Continuar',true,'Cancelar');
+      if(!seguir2) return;
+    }
   }
 
   let clienteIdFinal=null, clienteNombre='';
