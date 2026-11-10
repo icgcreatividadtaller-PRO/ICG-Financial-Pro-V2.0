@@ -8655,6 +8655,32 @@ function fechaAISO(ddmmyyyy){
   return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
 }
 
+// Factura de venta en el formato anterior (comprobante B01, de Alegra). Se conserva como respaldo
+// para registrar las B01 que quedaron pendientes: aquí la "Fecha de Vencimiento" SÍ es la del
+// cliente (a diferencia del e-CF).
+function parseFacturaVentaB01(texto){
+  const t=texto||'';
+  const out={ncf:null,fechaExpedicion:null,fechaVencimiento:null,clienteNombre:null,clienteRNC:null,
+             descripcion:null,subtotal:null,itbis:null,total:null,anulada:false,
+             tipoECF:null,otrosImpuestos:0,otrosDetalle:[],esECF:false};
+  out.anulada = /ANULADA/i.test(t);
+  let m;
+  m=t.match(/NCF\s+([A-Z]\d{9,15})/i); if(m) out.ncf=m[1].toUpperCase();
+  m=t.match(/FECHA\s*DE\s*EXPEDICI[OÓ]N\D*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m) out.fechaExpedicion=fechaAISO(m[1]);
+  m=t.match(/FECHA\s*DE\s*VENCIMIENTO\D*(\d{1,2}\/\d{1,2}\/\d{4})/i); if(m) out.fechaVencimiento=fechaAISO(m[1]);
+  m=t.match(/SE[ÑN]OR\(ES\)\s+([^\n]+)/i); if(m) out.clienteNombre=m[1].replace(/\s+/g,' ').trim();
+  m=t.match(/\bRNC\b\D{0,3}(\d[\d\-]{6,})/i); if(m) out.clienteRNC=m[1];
+  m=t.match(/Subtotal\s+RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.subtotal=parseFloat(m[1].replace(/,/g,''));
+  m=t.match(/ITBIS\s*\([\d.]+%\)\s*RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.itbis=parseFloat(m[1].replace(/,/g,''));
+  m=t.match(/\bTotal\b\s+RD\$?\s*([\d,]+\.\d{2})/i); if(m) out.total=parseFloat(m[1].replace(/,/g,''));
+  // Descripción: lo que hay entre el encabezado de la tabla y el primer monto en RD$
+  m=t.match(/Producto\/?\s*servicio[^\n]*\n([\s\S]*?)RD\$/i);
+  if(m){
+    out.descripcion = m[1].replace(/\s+/g,' ').replace(/\d+\s*$/,'').trim();
+  }
+  return out;
+}
+
 // Analiza el texto de una factura de venta PROPIA en el formato de la factura electrónica
 // (e-CF) que emite el facturador de la DGII. Los B01 ya no son válidos en este sistema.
 // OJO: la "Fecha Vencimiento" que trae el PDF NO es el plazo de pago del cliente — es la
@@ -8662,6 +8688,8 @@ function fechaAISO(ddmmyyyy){
 // El plazo de pago se elige en la ventana de revisión.
 function parseFacturaVenta(texto){
   const t=(texto||'').replace(/\r/g,'');
+  // ¿Es un e-CF? (trae "e-NCF" o un número E + 12 dígitos). Si no, se intenta el formato B01 anterior.
+  if(!/\be-?\s*NCF\b/i.test(t) && !/\bE\d{12}\b/.test(t) && /\bNCF\s+[A-Z]\d{9,15}/i.test(t)) return parseFacturaVentaB01(texto);
   const out={ncf:null,tipoECF:null,fechaExpedicion:null,fechaVencimiento:null,clienteNombre:null,clienteRNC:null,
              descripcion:null,subtotal:null,subtotalGravado:null,subtotalExento:null,itbis:null,total:null,
              otrosImpuestos:0,otrosDetalle:[],anulada:false,esECF:false};
@@ -8749,7 +8777,7 @@ function renderRevisionFactura(){
   const _estAviso='border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;';
   const avisoSinECF = !p.ncf
     ? `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);${_estAviso}color:#f3b4b4;">
-        ⚠️ <strong>No encontré un e-NCF</strong> en este documento. Este lector entiende la factura de crédito fiscal electrónica (e-CF); si es otro tipo de documento, escribe los datos a mano.
+        ⚠️ <strong>No encontré el número de comprobante (e-NCF o NCF)</strong> en este documento. Este lector entiende la factura electrónica (e-CF) y la B01 anterior; si es otro tipo de documento, escribe los datos a mano.
       </div>` : '';
   const avisoNota = (p.tipoECF==='E33' || p.tipoECF==='E34')
     ? `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.4);${_estAviso}color:#f3b4b4;">
@@ -8785,12 +8813,12 @@ function renderRevisionFactura(){
         <div class="form-group"><label>Fecha Emisión</label><input autocomplete="off" type="date" id="cf-fecha-emision" value="${esc(p.fechaExpedicion||today())}" onchange="cfRecalcVenc()"></div>
         <div class="form-group"><label>Plazo de pago</label>
           <select id="cf-plazo" onchange="cfRecalcVenc()">
-            <option value="0">Contado</option><option value="15">15 días</option><option value="30">30 días</option>
+            <option value="0" ${p.fechaVencimiento?'':'selected'}>Contado</option><option value="15">15 días</option><option value="30">30 días</option>
             <option value="45">45 días</option><option value="60">60 días</option><option value="90">90 días</option>
-            <option value="custom">Personalizado</option>
+            <option value="custom" ${p.fechaVencimiento?'selected':''}>Personalizado</option>
           </select>
         </div>
-        <div class="form-group"><label>Vencimiento</label><input autocomplete="off" type="date" id="cf-fecha-vencimiento" value="${esc(p.fechaExpedicion||today())}" onchange="cfVencManual()"></div>
+        <div class="form-group"><label>Vencimiento</label><input autocomplete="off" type="date" id="cf-fecha-vencimiento" value="${esc(p.fechaVencimiento||p.fechaExpedicion||today())}" onchange="cfVencManual()"></div>
       </div>
       <div class="form-group" style="grid-column:span 2;"><label>Descripción</label><input autocomplete="off" type="text" id="cf-desc" value="${esc(p.descripcion||'')}"></div>
       <div class="form-group"><label>Subtotal (RD$)</label><input autocomplete="off" type="text" inputmode="decimal" id="cf-subtotal" value="${fmtInputNum(p.subtotal)}" oninput="formatMontoInput(this)" ${esAnuladaInicial?'disabled':''}></div>
