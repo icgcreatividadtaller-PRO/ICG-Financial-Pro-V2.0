@@ -2739,6 +2739,53 @@ function cargarLibreria(nombre){
   </div>
 </div>
 
+<!-- ══ PEDIR UN TEXTO (reemplaza prompt() del navegador) ══ -->
+<div class="modal-overlay" id="promptModal" style="z-index:99997;">
+  <div class="modal" style="max-width:420px;border:1px solid rgba(79,70,229,.4);border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(79,70,229,.08);">
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:12px;">
+      <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:rgba(79,70,229,.12);color:#818cf8;">+</div>
+      <h2 id="prompt-title" style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.03em;font-weight:700;line-height:1.4;padding-top:9px;margin:0;">Nuevo</h2>
+    </div>
+    <p id="prompt-msg" style="font-size:15px;color:#a8b4cc;line-height:1.65;margin:0 0 14px;text-transform:none;letter-spacing:normal;font-weight:400;"></p>
+    <div class="form-group" style="margin-bottom:22px;"><input autocomplete="off" type="text" id="prompt-input" maxlength="60" style="font-size:17px;border-color:rgba(79,70,229,.4);"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn" id="prompt-ok" style="font-size:14px;background:#4f46e5;border-color:#4f46e5;color:#fff;padding:13px 20px;width:100%;box-sizing:border-box;border-radius:9px;">Añadir</button>
+      <button class="btn btn-ghost" id="prompt-cancel" style="font-size:14px;padding:13px 20px;width:100%;box-sizing:border-box;border-radius:9px;">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PRÓXIMO PERÍODO DE UN SERVICIO FIJO (después de pagar) ══ -->
+<div class="modal-overlay" id="sfNextModal" style="z-index:99990;">
+  <div class="modal" style="max-width:470px;border:1px solid rgba(79,70,229,.4);border-radius:14px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(79,70,229,.08);">
+    <button class="modal-close" onclick="cerrarProximoPeriodoServicio()">×</button>
+    <div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;">
+      <div style="width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;background:rgba(34,197,94,.12);color:#22c55e;">✓</div>
+      <div>
+        <h2 style="font-size:16px;color:#e8eeff;text-transform:uppercase;letter-spacing:.03em;font-weight:700;line-height:1.4;margin:0;">Pago registrado</h2>
+        <div id="sf-next-nombre" style="font-size:14px;color:#9ca3af;margin-top:2px;"></div>
+      </div>
+    </div>
+    <div id="sf-next-pago" style="font-size:14px;color:#a8b4cc;line-height:1.6;background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:18px;"></div>
+    <div style="font-size:13px;color:#818cf8;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:10px;">Próximo período</div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label>Monto (RD$)</label>
+      <input autocomplete="off" type="text" inputmode="decimal" id="sf-next-monto" placeholder="0.00" oninput="formatMontoInput(this)"
+        style="font-family:var(--mono);font-size:20px;font-weight:600;border-color:rgba(79,70,229,.4);">
+      <div style="font-size:12px;color:#6b7a99;margin-top:5px;line-height:1.5;">Si todavía no llega la factura, deja el mismo monto y corrígelo después con ✏️ Editar.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div class="form-group" id="sf-next-fecha-wrap"><label>Período</label><input autocomplete="off" type="date" id="sf-next-fecha"></div>
+      <div class="form-group"><label>Vencimiento</label><input autocomplete="off" type="date" id="sf-next-vence"></div>
+    </div>
+    <div id="sf-next-aviso" style="display:none;background:rgba(253,201,1,.08);border:1px solid rgba(253,201,1,.35);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:#f0dba0;line-height:1.55;"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px;">
+      <button class="btn" onclick="guardarProximoPeriodoServicio()" style="font-size:14px;background:#4f46e5;border-color:#4f46e5;color:#fff;padding:13px 20px;width:100%;box-sizing:border-box;border-radius:9px;">Guardar próximo período</button>
+      <button class="btn btn-ghost" onclick="cerrarProximoPeriodoServicio()" style="font-size:14px;padding:13px 20px;width:100%;box-sizing:border-box;border-radius:9px;">Dejar como está</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ CARGAR COMPROBANTE (Fase 1 — OCR de transacciones bancarias) ══ -->
 <!-- ══ EDITAR REFERENCIA (registros ya existentes) ══ -->
 <div class="modal-overlay" id="editRefModal">
@@ -4251,8 +4298,8 @@ function refreshCxCCatSelect(val){
   sel.innerHTML='<option value="">Sin categoría</option>'+cats.map(c=>`<option value="${c.key}">${esc(c.label)}</option>`).join('');
   if(val && sel.querySelector(`option[value="${val}"]`)) sel.value=val;
 }
-function addCustomCCCat(){
-  const name = prompt('Nueva categoría para la tarjeta:');
+async function addCustomCCCat(){
+  const name = await icgPrompt('Escribe el nombre de la nueva categoría para la tarjeta.','Nueva categoría · Tarjeta','Nombre de la categoría');
   if(!name||!name.trim()) return;
   const label = name.trim();
   const key = 'cc_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
@@ -4281,8 +4328,8 @@ function refreshCCCatSelect(selectVal){
   if(selectVal) sel.value = selectVal;
 }
 
-function addCustomCxCCat(){
-  const name=prompt('Nueva categoría:');
+async function addCustomCxCCat(){
+  const name=await icgPrompt('Escribe el nombre de la nueva categoría de ingreso.','Nueva categoría · Ingreso','Nombre de la categoría');
   if(!name||!name.trim())return;
   const label=name.trim();
   const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
@@ -6717,6 +6764,30 @@ function advanceOneMonth(dateStr){
   return `${newY}-${String(newM).padStart(2,'0')}-${String(newD).padStart(2,'0')}`;
 }
 
+// Suma n meses a una fecha YYYY-MM-DD conservando el día original (31/01 + 1 → 28/02, pero
+// 31/01 + 2 → 31/03: no arrastra el recorte de fin de mes).
+function addMonthsKeepDay(dateStr, n){
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const total = y*12 + (m-1) + n;
+  const ny = Math.floor(total/12), nm = total%12 + 1;
+  const dias = new Date(ny, nm, 0).getDate();
+  return `${ny}-${String(nm).padStart(2,'0')}-${String(Math.min(d,dias)).padStart(2,'0')}`;
+}
+
+// Próximo ciclo mensual de un Servicio Fijo. Avanza UN mes desde el vencimiento que se acaba
+// de pagar; pero si ese vencimiento ya quedó en el pasado respecto a la fecha del pago (porque
+// el registro estaba atrasado), sigue avanzando hasta el primer vencimiento que todavía no pasó.
+// Así el próximo pago nunca nace "vencido" por arrastrar una fecha vieja.
+function proximoCicloServicio(vence, fechaPeriodo, fechaPago){
+  let n = 1;
+  if(fechaPago){ while(n<48 && addMonthsKeepDay(vence,n) < fechaPago) n++; }
+  return {
+    vence: addMonthsKeepDay(vence, n),
+    fecha: fechaPeriodo ? addMonthsKeepDay(fechaPeriodo, n) : '',
+    meses: n
+  };
+}
+
 function confirmCXPPayment(){
   const item = S.cuentasPagar[_cxpPaySection].find(x=>x.id===_cxpPayId); if(!item)return;
   const date       = document.getElementById('cxp-pay-date').value;
@@ -6745,7 +6816,7 @@ function confirmCXPPayment(){
     const cuotaBase = (parseFloat(item.monto)||0)>0 ? item.monto : amount;
     interesDeEstePago = Math.round(Math.min(amount, (parseFloat(item.saldo)||0)*(parseFloat(item.tasa)/100/12)*Math.min(1,amount/cuotaBase))*100)/100;
   }
-  let prestamoRolledOver = false, prestamoSaldado = false, capitalAbonado = 0, servicioRolledOver = false;
+  let prestamoRolledOver = false, prestamoSaldado = false, capitalAbonado = 0, servicioRolledOver = false, servicioPrev = null, servicioCiclo = null;
   if(newPending <= 0.009) {
     if(_cxpPaySection === 'prestamos'){
       // Piloto automático de préstamos: al saldar la cuota, calcula el interés del
@@ -6770,15 +6841,15 @@ function confirmCXPPayment(){
         prestamoRolledOver = true;
       }
     } else if(_cxpPaySection === 'serviciosFijos'){
-      // Piloto automático de Servicios Fijos: al pagar, pregunta (sin bloquear) el monto del
-      // próximo período y deja el registro listo para el siguiente ciclo. Si todavía no llega
-      // la factura, se puede dejar vacío — igual avanza, usando el mismo monto por ahora, y se
-      // corrige después con el botón ✏️ Editar cuando se sepa el monto real.
-      const respuesta = prompt(`¿Ya sabes el monto de "${item.nombre}" para el próximo período? (déjalo vacío si aún no llega la factura — se puede corregir después con Editar)`, '');
-      const montoIngresado = respuesta!=null ? (numVal({value:respuesta})||0) : 0;
-      item.monto = montoIngresado>0 ? montoIngresado : item.monto;
-      item.vence = advanceOneMonth(item.vence);
-      if(item.fecha) item.fecha = advanceOneMonth(item.fecha);
+      // Piloto automático de Servicios Fijos: al pagar, el registro queda listo (pendiente) para el
+      // próximo ciclo. Las fechas se calculan a partir del vencimiento pagado Y de la fecha del pago
+      // (ver proximoCicloServicio). Después se abre una ventana para confirmar o ajustar el monto
+      // y las fechas del próximo período.
+      servicioPrev = { vence:item.vence, fecha:item.fecha, monto:item.monto };
+      const ciclo = proximoCicloServicio(item.vence, item.fecha, date);
+      servicioCiclo = ciclo;
+      item.vence = ciclo.vence;
+      if(item.fecha) item.fecha = ciclo.fecha;
       item.estado = 'pendiente';
       item.paidDate = null;
       item.pagos = [];
@@ -6823,11 +6894,54 @@ function confirmCXPPayment(){
   } else if(prestamoRolledOver){
     pdetail += `<br>Capital abonado: <strong>${fmt(capitalAbonado)}</strong> · Nuevo saldo: <strong>${fmt(item.saldo)}</strong> · Próximo vencimiento: <strong>${fmtDate(item.vence)}</strong>`;
   } else if(servicioRolledOver){
-    pdetail += `<br>Próximo período: <strong>${fmt(item.monto)}</strong> · Vence: <strong>${fmtDate(item.vence)}</strong>`;
+    // El detalle y los campos del próximo período se muestran en la ventana propia (abajo).
   } else {
     pdetail += `<br>Factura completamente saldada`;
   }
-  notify(isPartial?'info':'success', isPartial?'Abono Registrado':(prestamoRolledOver?'Cuota Pagada · Ciclo Renovado':servicioRolledOver?'Pagado · Próximo Período Listo':'Pago Completo'), pdetail);
+  if(servicioRolledOver){
+    abrirProximoPeriodoServicio(item, pdetail, servicioPrev, servicioCiclo);
+    return;
+  }
+  notify(isPartial?'info':'success', isPartial?'Abono Registrado':(prestamoRolledOver?'Cuota Pagada · Ciclo Renovado':'Pago Completo'), pdetail);
+}
+
+// ── Ventana "Próximo período" de un Servicio Fijo (reemplaza el prompt() nativo del navegador) ──
+let _sfNextId=null, _sfNextOriginal=null;
+function abrirProximoPeriodoServicio(item, pagoDetalle, prev, ciclo){
+  _sfNextId = item.id;
+  _sfNextOriginal = { monto:item.monto, fecha:item.fecha||'', vence:item.vence };
+  document.getElementById('sf-next-nombre').textContent = item.nombre + (item.concepto?' · '+item.concepto:'');
+  document.getElementById('sf-next-pago').innerHTML = pagoDetalle;
+  setMontoValue('sf-next-monto', parseFloat(item.monto)||0);
+  document.getElementById('sf-next-fecha').value = item.fecha||'';
+  document.getElementById('sf-next-fecha-wrap').style.display = item.fecha ? '' : 'none';
+  document.getElementById('sf-next-vence').value = item.vence||'';
+  const aviso = document.getElementById('sf-next-aviso');
+  if(ciclo && ciclo.meses>1 && prev){
+    aviso.innerHTML = `⚠️ El vencimiento que pagaste era <strong>${fmtDate(prev.vence)}</strong>, ya atrasado. Dejé el próximo en <strong>${fmtDate(item.vence)}</strong>, la primera fecha que todavía no pasa. Si en realidad también debes el mes anterior, ajusta el vencimiento aquí.`;
+    aviso.style.display='';
+  } else { aviso.innerHTML=''; aviso.style.display='none'; }
+  document.getElementById('sfNextModal').classList.add('open');
+  setTimeout(()=>{ const m=document.getElementById('sf-next-monto'); if(m){ m.focus(); m.select(); } },60);
+}
+function cerrarProximoPeriodoServicio(){
+  document.getElementById('sfNextModal').classList.remove('open');
+  _sfNextId=null; _sfNextOriginal=null;
+}
+function guardarProximoPeriodoServicio(){
+  const item = (S.cuentasPagar.serviciosFijos||[]).find(x=>x.id===_sfNextId);
+  if(!item){ cerrarProximoPeriodoServicio(); return; }
+  const vence = document.getElementById('sf-next-vence').value;
+  if(!vence){ notify('error','Vencimiento Requerido','Indica la fecha de vencimiento del próximo período.'); return; }
+  const monto = numVal('sf-next-monto');
+  if(monto>0) item.monto = monto;
+  const fecha = document.getElementById('sf-next-fecha').value;
+  if(item.fecha && fecha) item.fecha = fecha;
+  item.vence = vence;
+  save(); renderCXP();
+  const nombre=item.nombre;
+  cerrarProximoPeriodoServicio();
+  notifyQuick('success','Próximo Período Guardado', `${nombre}: ${fmt(item.monto)} · vence ${fmtDate(item.vence)}`);
 }
 
 
@@ -7915,8 +8029,8 @@ function catLabel(x){
   const key = resolverCategoriaEgresoDeCxP(x.categoriaEgreso) || x.categoriaEgreso;
   return esc(getCatLabel(key, getAllEgrCats()));
 }
-function addCustomCategory(type){
-  const name=prompt(type==='ing'?'Nueva categoría de Ingreso:':'Nueva categoría de Egreso:');
+async function addCustomCategory(type){
+  const name=await icgPrompt(type==='ing'?'Escribe el nombre de la nueva categoría de ingreso.':'Escribe el nombre de la nueva categoría de egreso.', type==='ing'?'Nueva categoría · Ingreso':'Nueva categoría · Egreso','Nombre de la categoría');
   if(!name||!name.trim())return;
   const label=name.trim();
   const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
@@ -7934,8 +8048,8 @@ function addCustomCategory(type){
     document.getElementById('egr-categoria').value=key;
   }
 }
-function addCustomSupplierCat(){
-  const name=prompt('Nueva categoría de Suplidor:');
+async function addCustomSupplierCat(){
+  const name=await icgPrompt('Escribe el nombre de la nueva categoría de suplidor.','Nueva categoría · Suplidor','Nombre de la categoría');
   if(!name||!name.trim())return;
   const label=name.trim();
   const key='custom_'+label.toLowerCase().replace(/[^a-z0-9]/g,'_');
@@ -11933,6 +12047,45 @@ function icgConfirm(msg, title='Confirmar', okLabel='Aceptar', danger=true, canc
   });
 }
 
+
+// Pide un texto al usuario en una ventana del sistema (reemplaza al prompt() nativo del navegador).
+// Devuelve el texto escrito (ya sin espacios sobrantes) o null si se cancela.
+function icgPrompt(msg, title='Nuevo', placeholder='', okLabel='Añadir'){
+  return new Promise(resolve=>{
+    const modal=document.getElementById('promptModal');
+    const inp=document.getElementById('prompt-input');
+    const okBtn=document.getElementById('prompt-ok');
+    const cnBtn=document.getElementById('prompt-cancel');
+    document.getElementById('prompt-title').textContent=title;
+    document.getElementById('prompt-msg').textContent=msg;
+    okBtn.textContent=okLabel;
+    inp.value=''; inp.placeholder=placeholder; inp.style.borderColor='';
+    modal.classList.add('open');
+    setTimeout(()=>inp.focus(),60);
+    const ok=()=>{
+      const v=inp.value.trim();
+      if(!v){ inp.style.borderColor='#ef4444'; inp.focus(); return; }
+      cleanup(); resolve(v);
+    };
+    const cancel=()=>{ cleanup(); resolve(null); };
+    const tecla=(e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); ok(); }
+      else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); cancel(); } // stopPropagation: el ESC global no debe cerrar también la ventana de atrás
+    };
+    const escribe=()=>{ inp.style.borderColor=''; };
+    function cleanup(){
+      modal.classList.remove('open');
+      okBtn.removeEventListener('click',ok);
+      cnBtn.removeEventListener('click',cancel);
+      inp.removeEventListener('keydown',tecla);
+      inp.removeEventListener('input',escribe);
+    }
+    okBtn.addEventListener('click',ok);
+    cnBtn.addEventListener('click',cancel);
+    inp.addEventListener('keydown',tecla);
+    inp.addEventListener('input',escribe);
+  });
+}
 
 function icgAlert(msg, title='Aviso'){
   return new Promise(resolve=>{
